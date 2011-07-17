@@ -61,7 +61,6 @@
         <developerConnection>scm:git:git@github.com:ringo/ringojs.git</developerConnection>
     </scm>
 
-
     <developers>
         <developer>
             <id>hns</id>
