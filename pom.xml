@@ -1,15 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.ringojs</groupId>
     <artifactId>ringojs</artifactId>
-    <version>0.9.0-SNAPSHOT</version>
+    <version>0.9.1-SNAPSHOT</version>
 
-    <packaging>jar</packaging>    
+    <packaging>jar</packaging>
 
     <name>RingoJS</name>
     <description>
@@ -27,6 +25,12 @@
         </license>
     </licenses>
 
+    <scm>
+        <url>http://github.com/oravecz/ringojs</url>
+        <connection>scm:git:git://github.com/oravecz/ringojs.git</connection>
+        <developerConnection>scm:git:git@github.com:oravecz/ringojs.git</developerConnection>
+    </scm>
+
     <distributionManagement>
         <snapshotRepository>
             <id>tracer_repo</id>
@@ -39,13 +43,7 @@
                <url>https://repo.tracermedia.com/artifactory/ext-releases-local</url>
            </repository>
     </distributionManagement>
-
-    <scm>
-        <url>http://github.com/ringo/ringojs</url>
-        <connection>scm:git:git://github.com/ringo/ringojs.git</connection>
-        <developerConnection>scm:git:git@github.com:ringo/ringojs.git</developerConnection>
-    </scm>
-
+    
     <developers>
         <developer>
             <id>hns</id>
@@ -303,10 +301,9 @@
                         <phase>test</phase>
                         <configuration>
                             <target unless="maven.test.skip">
-                                <java classname="org.ringojs.tools.launcher.Main" fork="true"
-                                      failonerror="yes">
-                                    <arg value="test/all.js"/>
-                                    <classpath refid="maven.test.classpath"/>
+                                <java classname="org.ringojs.tools.launcher.Main" fork="true" failonerror="yes">
+                                    <arg value="test/all.js" />
+                                    <classpath refid="maven.test.classpath" />
                                 </java>
                             </target>
                         </configuration>
