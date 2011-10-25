@@ -69,8 +69,8 @@ public class RingoConfiguration {
      * @param systemModules system module path to append to module path, or null
      * @throws FileNotFoundException if a moudule path item does not exist
      */
-    public RingoConfiguration(Repository ringoHome, List<String> userModules,
-                              List<String> systemModules) throws IOException {
+    public RingoConfiguration(Repository ringoHome, String[] userModules,
+                              String[] systemModules) throws IOException {
         this(ringoHome, null, userModules, systemModules);
     }
 
@@ -85,8 +85,8 @@ public class RingoConfiguration {
      * @throws FileNotFoundException if a moudule path item does not exist
      */
     public RingoConfiguration(Repository ringoHome, Repository basePath,
-                              List<String> userModules,
-                              List<String> systemModules) throws IOException {
+                              String[] userModules, String[] systemModules)
+            throws IOException {
         repositories = new ArrayList<Repository>();
         home = ringoHome;
         home.setAbsolute(true);
@@ -188,20 +188,12 @@ public class RingoConfiguration {
                 return repository;
             }
         }
-        // Try to resolve path as classpath resource
-        URL url = RingoConfiguration.class.getResource("/" + path);
-        if (url != null) {
-            String protocol = url.getProtocol();
-            if (("jar".equals(protocol) || "zip".equals(protocol))) {
-                Repository jar = toZipRepository(url);
-                if (jar != null) {
-                    repository = jar.getChildRepository(path);
-                    if (repository.exists()) {
-                        repository.setRoot();
-                        return repository;
-                    }
-                }
-            }
+        // Try to resolve path in main classloader classpath
+        ClassLoader loader = RingoConfiguration.class.getClassLoader();
+        repository = repositoryFromClasspath(path, loader);
+        if (repository != null && repository.exists()) {
+            repository.setRoot();
+            return repository;
         }
         return null;
     }
@@ -402,7 +394,7 @@ public class RingoConfiguration {
                 return res;
             }
         }
-        res = resourceFromClasspath(path);
+        res = resourceFromClasspath(path, null);
         if (res != null && res.exists()) {
             return res;
         }
@@ -423,7 +415,7 @@ public class RingoConfiguration {
                 return repo;
             }
         }
-        repo = repositoryFromClasspath(path);
+        repo = repositoryFromClasspath(path, null);
         if (repo != null && repo.exists()) {
             return repo;
         }
@@ -543,10 +535,11 @@ public class RingoConfiguration {
         return null;
     }
 
-    private static Resource resourceFromClasspath(String path)
+    private static Resource resourceFromClasspath(String path, ClassLoader loader)
             throws IOException {
-        URL url = urlFromClasspath(path.endsWith("/") ?
-                path.substring(0, path.length() - 1) : path);
+        String canonicalPath = path.endsWith("/") ?
+                path.substring(0, path.length() - 1) : path;
+        URL url = urlFromClasspath(canonicalPath, loader);
         if (url != null) {
             String protocol = url.getProtocol();
             if ("jar".equals(protocol) || "zip".equals(protocol)) {
@@ -560,9 +553,10 @@ public class RingoConfiguration {
 
     }
 
-    private static Repository repositoryFromClasspath(String path)
+    private static Repository repositoryFromClasspath(String path, ClassLoader loader)
             throws IOException {
-        URL url = urlFromClasspath(path.endsWith("/") ? path : path + "/");
+        String canonicalPath = path.endsWith("/") ? path : path + "/";
+        URL url = urlFromClasspath(canonicalPath, loader);
         if (url != null) {
             String protocol = url.getProtocol();
             if ("jar".equals(protocol) || "zip".equals(protocol)) {
@@ -575,8 +569,13 @@ public class RingoConfiguration {
         return null;
     }
 
-    private static URL urlFromClasspath(String path) {
-        ClassLoader loader = Thread.currentThread().getContextClassLoader();
+    private static URL urlFromClasspath(String path, ClassLoader loader) {
+        if (loader == null) {
+            loader = Thread.currentThread().getContextClassLoader();
+        }
+        if (loader == null) {
+            loader = RingoConfiguration.class.getClassLoader();
+        }
         if (loader == null) {
             return null;
         }
