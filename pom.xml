@@ -35,12 +35,12 @@
         <snapshotRepository>
             <id>td-repo</id>
             <name>td-repo-snapshots</name>
-            <url>s3://tracerdigital-repo/snapshots</url>
+            <url>s3://maven.tracerdigital.com/snapshots</url>
         </snapshotRepository>
         <repository>
             <id>td-repo</id>
             <name>td-repo-releases</name>
-            <url>s3://tracerdigital-repo/releases</url>
+            <url>s3://maven.tracerdigital.com/releases</url>
         </repository>
     </distributionManagement>
 
