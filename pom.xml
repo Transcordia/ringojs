@@ -37,13 +37,13 @@
 
     <distributionManagement>
         <snapshotRepository>
-            <id>td-repo</id>
-            <name>td-repo-snapshots</name>
+            <id>pykl-repo</id>
+            <name>pykl-repo-snapshots</name>
             <url>s3://repo.pykl.com/snapshots</url>
         </snapshotRepository>
         <repository>
-            <id>td-repo</id>
-            <name>td-repo-releases</name>
+            <id>tpykl-repo</id>
+            <name>pykl-repo-releases</name>
             <url>s3://repo.pykl.com/releases</url>
         </repository>
     </distributionManagement>
