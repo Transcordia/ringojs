@@ -28,9 +28,9 @@
     <!-- SCM config is specific to each fork -->
 
     <scm>
-        <url>http://github.com/oravecz/ringojs</url>
-        <connection>scm:git:git://github.com/oravecz/ringojs.git</connection>
-        <developerConnection>scm:git:git@github.com:oravecz/ringojs.git</developerConnection>
+        <url>http://github.com/pykl/ringojs</url>
+        <connection>scm:git:git://github.com/pykl/ringojs.git</connection>
+        <developerConnection>scm:git:git@github.com:pykl/ringojs.git</developerConnection>
     </scm>
 
     <!-- Distribution config is specific to each fork -->
