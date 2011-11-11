@@ -42,7 +42,7 @@
             <url>s3://repo.pykl.com/snapshots</url>
         </snapshotRepository>
         <repository>
-            <id>tpykl-repo</id>
+            <id>pykl-repo</id>
             <name>pykl-repo-releases</name>
             <url>s3://repo.pykl.com/releases</url>
         </repository>
