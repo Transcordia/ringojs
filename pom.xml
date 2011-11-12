@@ -39,12 +39,12 @@
         <snapshotRepository>
             <id>pykl-repo</id>
             <name>pykl-repo-snapshots</name>
-            <url>s3://repo.pykl.com/snapshots</url>
+            <url>s3://repo.pykl.org/snapshots</url>
         </snapshotRepository>
         <repository>
             <id>pykl-repo</id>
             <name>pykl-repo-releases</name>
-            <url>s3://repo.pykl.com/releases</url>
+            <url>s3://repo.pykl.org/releases</url>
         </repository>
     </distributionManagement>
 
