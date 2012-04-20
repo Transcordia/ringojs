@@ -26,7 +26,6 @@ import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.ScriptRuntime;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
-import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.WrappedException;
 import org.mozilla.javascript.Wrapper;
 import org.mozilla.javascript.tools.shell.Environment;
@@ -36,11 +35,9 @@ import org.ringojs.repository.Trackable;
 import org.ringojs.security.RingoSecurityManager;
 import org.ringojs.util.ScriptUtils;
 import org.mozilla.javascript.tools.shell.Global;
-import org.ringojs.wrappers.ModulePath;
 import org.ringojs.repository.Resource;
 
 import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.io.IOException;
@@ -56,7 +53,6 @@ public class RingoGlobal extends Global {
     private final static SecurityManager securityManager = System.getSecurityManager();
     private static ExecutorService threadPool;
     private static AtomicInteger ids = new AtomicInteger();
-    private int asyncCount = 0;
 
     public RingoGlobal(Context cx, RhinoEngine engine, boolean sealed) {
         this.engine = engine;
@@ -91,40 +87,24 @@ public class RingoGlobal extends Global {
                                  ScriptableObject.DONTENUM);
         names = new String[] {
             "defineClass",
-            "require",
             "getResource",
             "getRepository",
             "addToClasspath",
             "privileged",
             "spawn",
             "trycatch",
-            "increaseAsyncCount",
-            "decreaseAsyncCount"
+            "enterAsyncTask",
+            "exitAsyncTask"
         };
         defineFunctionProperties(names, RingoGlobal.class,
                                  ScriptableObject.DONTENUM);
-
-        ScriptableObject require = (ScriptableObject) get("require", this);
-        // Set up require.main property as setter - note that accessing this will cause
-        // the main module to be loaded, which may result in problems if engine setup
-        // isn't finished yet. Alas, the Securable Modules spec requires us to do this.
-        require.defineProperty("main", RingoGlobal.class,
-                DONTENUM | PERMANENT | READONLY);
-        require.defineProperty("paths", new ModulePath(engine.getRepositories(), this),
-                DONTENUM | PERMANENT | READONLY);
+        defineProperty("require", new Require(engine, this), DONTENUM);
         defineProperty("arguments", cx.newArray(this, engine.getArguments()), DONTENUM);
         // Set up "environment" in the global scope to provide access to the
         // System environment variables. http://github.com/ringo/ringojs/issues/#issue/88
         Environment.defineClass(this);
         Environment environment = new Environment(this);
-        defineProperty("environment", environment,
-                       ScriptableObject.DONTENUM);
-        try {
-            Method getter = RingoGlobal.class.getMethod("getAsyncCount", Scriptable.class);
-            defineProperty("asyncCount", this, getter, null, DONTENUM | PERMANENT | READONLY);
-        } catch (NoSuchMethodException nsm) {
-            throw new RuntimeException(nsm);
-        }
+        defineProperty("environment", environment, ScriptableObject.DONTENUM);
     }
 
     public RhinoEngine getEngine() {
@@ -144,25 +124,6 @@ public class RingoGlobal extends Global {
         engine.defineHostClass((Class) arg);
     }
 
-    public static Object require(final Context cx, Scriptable thisObj,
-                                 Object[] args, Function funObj) {
-        if (args.length != 1 || !(args[0] instanceof CharSequence)) {
-            throw Context.reportRuntimeError(
-                    "require() expects a single string argument");
-        }
-        RhinoEngine engine = ((RingoGlobal)funObj.getParentScope()).engine;
-        ModuleScope moduleScope = thisObj instanceof ModuleScope ?
-                (ModuleScope) thisObj : null;
-        try {
-            RingoWorker worker = engine.getCurrentWorker();
-            String arg = args[0].toString();
-            ModuleScope module = worker.loadModule(cx, arg, moduleScope);
-            return module.getExports();
-        } catch (IOException iox) {
-            throw Context.reportRuntimeError("Cannot find module '" + args[0] + "'");
-        }
-    }
-
     public static Object getResource(final Context cx, Scriptable thisObj,
                                      Object[] args, Function funObj) {
         if (args.length != 1 || !(args[0] instanceof String)) {
@@ -171,7 +132,7 @@ public class RingoGlobal extends Global {
         }
         RhinoEngine engine = ((RingoGlobal) funObj.getParentScope()).engine;
         try {
-            Resource res = engine.findResource((String) args[0],
+            Resource res = engine.findResource((String) args[0], null,
                     engine.getParentRepository(thisObj));
             return cx.getWrapFactory().wrapAsJavaObject(cx, engine.getScope(),
                     res, null);
@@ -257,7 +218,7 @@ public class RingoGlobal extends Global {
         }
         Scriptable scope = getTopLevelScope(thisObj);
         try {
-            return ((Function)args[0]).call(cx, scope, thisObj, RhinoEngine.EMPTY_ARGS);
+            return ((Function)args[0]).call(cx, scope, thisObj, ScriptRuntime.emptyArgs);
         } catch (RhinoException re) {
             return new NativeJavaObject(scope, re, null);
         }
@@ -291,41 +252,12 @@ public class RingoGlobal extends Global {
         });
     }
 
-    public synchronized int getAsyncCount(Scriptable obj) {
-        return asyncCount;
+    public void enterAsyncTask() {
+        engine.enterAsyncTask();
     }
 
-    public synchronized void increaseAsyncCount() {
-        if (securityManager != null) {
-            securityManager.checkPermission(RingoSecurityManager.SPAWN_THREAD);
-        }
-        asyncCount += 1;
-    }
-
-    public synchronized void decreaseAsyncCount() {
-        if (securityManager != null) {
-            securityManager.checkPermission(RingoSecurityManager.SPAWN_THREAD);
-        }
-        asyncCount -= 1;
-        if (asyncCount <= 0) {
-            notifyAll();
-        }
-    }
-
-    synchronized void waitTillDone() throws InterruptedException {
-        while (asyncCount > 0) {
-            wait();
-        }
-    }
-
-    public static Object getMain(Scriptable thisObj) {
-        try {
-            RhinoEngine engine = ((RingoGlobal) thisObj.getParentScope()).engine;
-            ModuleScope main = engine.getMainModuleScope();
-            return main != null ? main.getModuleObject() : Undefined.instance;
-        } catch (Exception x) {
-            return Undefined.instance;
-        }
+    public void exitAsyncTask() {
+        engine.exitAsyncTask();
     }
 
     static ExecutorService getThreadPool() {

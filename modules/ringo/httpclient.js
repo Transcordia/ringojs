@@ -12,7 +12,7 @@ var {Buffer} = require('ringo/buffer');
 var {Decoder} = require('ringo/encoding');
 var {getMimeParameter, Headers, urlEncode} = require('ringo/utils/http');
 var base64 = require('ringo/base64');
-var {defer} = require('ringo/promise');
+var {Deferred} = require('ringo/promise');
 var log = require('ringo/logging').getLogger(module.id);
 
 export('request', 'post', 'get', 'del', 'put');
@@ -289,7 +289,7 @@ var Exchange = function(url, options, callbacks) {
                 }
             } finally {
                 if (options.async) {
-                    global.decreaseAsyncCount();
+                    global.exitAsyncTask();
                 }
             }
             return;
@@ -329,7 +329,7 @@ var Exchange = function(url, options, callbacks) {
                 }
             } finally {
                 if (options.async) {
-                    global.decreaseAsyncCount();
+                    global.exitAsyncTask();
                 }
             }
             return;
@@ -343,7 +343,7 @@ var Exchange = function(url, options, callbacks) {
                 }
             } finally {
                 if (options.async) {
-                    global.decreaseAsyncCount();
+                    global.exitAsyncTask();
                 }
             }
             return;
@@ -356,7 +356,7 @@ var Exchange = function(url, options, callbacks) {
                 }
             } finally {
                 if (options.async) {
-                    global.decreaseAsyncCount();
+                    global.exitAsyncTask();
                 }
             }
             return;
@@ -374,7 +374,7 @@ var Exchange = function(url, options, callbacks) {
         var [username, password] = userInfo.split(":");
         options.username = options.username || username;
         options.password = options.password || password;
-    }    
+    }
 
     if (typeof(options.username) === 'string' && typeof(options.password) === 'string') {
         var authKey = base64.encode(options.username + ':' + options.password);
@@ -576,7 +576,7 @@ var Client = function(timeout, followRedirects) {
     this.request = function(options) {
         var opts = defaultOptions(options);
         if (opts.promise) {
-            var deferred = defer();
+            var deferred = new Deferred();
             opts.success = function() {deferred.resolve(arguments[3])};
             opts.error = function() {deferred.resolve(arguments[2], true)};
             opts.async = true;
@@ -602,13 +602,13 @@ var Client = function(timeout, followRedirects) {
         try {
             client.send(exchange.contentExchange);
             if (opts.async) {
-                global.increaseAsyncCount();
+                global.enterAsyncTask();
             } else {
                 exchange.contentExchange.waitForDone();
             }
         } catch (e) { // probably java.net.ConnectException
-            if (typeof(callbacks.error) === 'function') {
-                callbacks.error(e, 0, exchange);
+            if (typeof(opts.error) === 'function') {
+                opts.error(e, 0, exchange);
             }
         }
         return opts.promise ? deferred.promise : exchange;
@@ -689,6 +689,10 @@ function getClient() {
  *
  * @param {Object} options
  * @returns {Exchange} exchange object
+ * @see #get
+ * @see #post
+ * @see #put
+ * @see #del
  */
 var request = function() {
     var client = getClient();
@@ -704,7 +708,7 @@ var request = function() {
  * @param {Function} success callback in case of successful status code, optional
  * @param {Function} error callback in case of any error - transmission or response, optional
  * @returns {Exchange} exchange object
- * @see request
+ * @see #request
  */
 var post = function() {
     var client = getClient();
@@ -720,7 +724,7 @@ var post = function() {
  * @param {Function} success callback in case of successful status code, optional
  * @param {Function} error callback in case of any error - transmission or response, optional
  * @returns {Exchange} exchange object
- * @see request
+ * @see #request
  */
 var get = function() {
     var client = getClient();
@@ -736,7 +740,7 @@ var get = function() {
  * @param {Function} success callback in case of successful status code, optional
  * @param {Function} error callback in case of any error - transmission or response, optional
  * @returns {Exchange} exchange object
- * @see request
+ * @see #request
  */
 var del = function() {
     var client = getClient();
@@ -752,11 +756,9 @@ var del = function() {
  * @param {Function} success callback in case of successful status code, optional
  * @param {Function} error callback in case of any error - transmission or response, optional
  * @returns {Exchange} exchange object
- * @see request
+ * @see #request
  */
 var put = function() {
     var client = getClient();
     return client.put.apply(client, arguments);
 };
-
-

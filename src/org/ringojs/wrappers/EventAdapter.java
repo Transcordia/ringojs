@@ -13,14 +13,18 @@ import org.mozilla.javascript.SecurityController;
 import org.mozilla.javascript.SecurityUtilities;
 import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
+import org.mozilla.javascript.annotations.JSGetter;
 import org.ringojs.engine.RhinoEngine;
 import org.ringojs.engine.RingoWorker;
 import org.mozilla.javascript.Undefined;
 
+import static org.mozilla.classfile.ClassFileWriter.ACC_FINAL;
+import static org.mozilla.classfile.ClassFileWriter.ACC_PRIVATE;
 import static org.mozilla.classfile.ClassFileWriter.ACC_PUBLIC;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.security.CodeSource;
 import java.security.ProtectionDomain;
 import java.util.HashMap;
@@ -28,13 +32,16 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.WeakHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class EventAdapter extends ScriptableObject {
 
     private RhinoEngine engine;
     private Map<String,List<Callback>> callbacks = new HashMap<String,List<Callback>>();
-    static Map<Class<?>,Class<?>> adapterCache = new HashMap<Class<?>, Class<?>>();
+    private Object impl;
+
+    static Map<Object, Class<?>> adapterCache = new WeakHashMap<Object, Class<?>>();
     static AtomicInteger serial = new AtomicInteger();
 
     @Override
@@ -54,30 +61,38 @@ public class EventAdapter extends ScriptableObject {
     @SuppressWarnings("unchecked")
     public static Object jsConstructor(Context cx, Object[] args,
                                        Function function, boolean inNewExpr) {
-        int length = args.length;
-        if (length != 1 || !(args[0] instanceof NativeJavaClass)) {
-            throw ScriptRuntime.typeError2("msg.not.java.class.arg",
-                    String.valueOf(1),
-                    length == 0 ? "undefined" : ScriptRuntime.toString(args[0]));
+        if (args.length == 0 || !(args[0] instanceof NativeJavaClass)) {
+            throw ScriptRuntime.typeError2("msg.not.java.class.arg", "1",
+                    args.length == 0 ? "undefined" : ScriptRuntime.toString(args[0]));
         }
-        Class<?> interf = ((NativeJavaClass) args[0]).getClassObject();
-        if (!interf.isInterface()) {
-            throw ScriptRuntime.typeError("EventAdapter argument must be interface");
-        }
+        Class<?> clazz = ((NativeJavaClass) args[0]).getClassObject();
         try {
-            Class<?> adapterClass = adapterCache.get(interf);
+            // TODO we need to include event mapping in the cache lookup!
+            Class<?> adapterClass = adapterCache.get(clazz);
             if (adapterClass == null) {
                 String className = "EventAdapter" + serial.incrementAndGet();
-                byte[] code = getAdapterClass(className, interf);
+                Map overrides = null;
+                if (args.length > 1 && args[1] instanceof Map) {
+                    overrides = (Map) args[1];
+                }
+                byte[] code = getAdapterClass(className, clazz, overrides);
                 adapterClass = loadAdapterClass(className, code);
+                adapterCache.put(clazz, adapterClass);
             }
             Scriptable scope = getTopLevelScope(function);
             RhinoEngine engine = RhinoEngine.getEngine(scope);
-            Constructor cnst = adapterClass.getConstructor(RhinoEngine.class);
-            return cnst.newInstance(engine);
+            Constructor cnst = adapterClass.getConstructor(EventAdapter.class);
+            EventAdapter adapter = new EventAdapter(engine);
+            adapter.impl = cnst.newInstance(adapter);
+            return adapter;
         } catch (Exception ex) {
             throw Context.throwAsScriptRuntimeEx(ex);
         }
+    }
+
+    @JSGetter
+    public Object getImpl() {
+        return impl;
     }
 
     @JSFunction
@@ -101,8 +116,7 @@ public class EventAdapter extends ScriptableObject {
             list = new LinkedList<Callback>();
             callbacks.put(type, list);
         }
-        Callback callback = new Callback((Scriptable)function, sync);
-        list.add(callback);
+        list.add(new Callback((Scriptable)function, sync));
     }
 
     @JSFunction
@@ -156,31 +170,49 @@ public class EventAdapter extends ScriptableObject {
         return false;
     }
 
-    private static byte[] getAdapterClass(String className,
-                                          Class<?> interf) {
-        String superName = EventAdapter.class.getName();
-        ClassFileWriter cfw = new ClassFileWriter(className,
-                                                  superName,
+    private static byte[] getAdapterClass(String className, Class<?> clazz,
+                                          Map<String, String> overrides) {
+        boolean isInterface = clazz.isInterface();
+        String superName = isInterface ? Object.class.getName() : clazz.getName();
+        String adapterSignature = classToSignature(EventAdapter.class);
+        ClassFileWriter cfw = new ClassFileWriter(className, superName,
                                                   "<EventAdapter>");
-        cfw.addInterface(interf.getName());
-        Method[] methods = interf.getMethods();
+        if (isInterface) {
+            cfw.addInterface(clazz.getName());
+        }
+        Method[] methods = clazz.getMethods();
 
-        cfw.startMethod("<init>", "(Lorg/ringojs/engine/RhinoEngine;)V", ACC_PUBLIC);
+        cfw.addField("events", adapterSignature, (short) (ACC_PRIVATE | ACC_FINAL));
+
+        cfw.startMethod("<init>", "(" + adapterSignature + ")V", ACC_PUBLIC);
         // Invoke base class constructor
-        cfw.add(ByteCode.ALOAD_0);  // this
-        cfw.add(ByteCode.ALOAD_1);  // engine
-        cfw.addInvoke(ByteCode.INVOKESPECIAL, superName, "<init>",
-                "(Lorg/ringojs/engine/RhinoEngine;)V");
+        cfw.addLoadThis();
+        cfw.addInvoke(ByteCode.INVOKESPECIAL, superName, "<init>", "()V");
+        cfw.addLoadThis();
+        cfw.add(ByteCode.ALOAD_1);  // event adapter
+        cfw.add(ByteCode.PUTFIELD, cfw.getClassName(), "events", adapterSignature);
         cfw.add(ByteCode.RETURN);
-        cfw.stopMethod((short)2); // this
+        cfw.stopMethod((short)2);
 
         for (Method method : methods) {
+            String methodName = method.getName();
+            String eventName = overrides == null ?
+                    toEventName(methodName) : overrides.get(methodName);
+            if (eventName == null || Modifier.isFinal(method.getModifiers())) {
+                continue;
+            }
             Class<?>[]paramTypes = method.getParameterTypes();
             int paramLength = paramTypes.length;
+            int localsLength = paramLength + 1;
+            for (Class<?> c : paramTypes) {
+                // adjust locals length for long and double parameters
+                if (c == Double.TYPE || c == Long.TYPE) ++localsLength;
+            }
             Class<?>returnType = method.getReturnType();
-            cfw.startMethod(method.getName(), getSignature(paramTypes, returnType), ACC_PUBLIC);
+            cfw.startMethod(methodName, getSignature(paramTypes, returnType), ACC_PUBLIC);
             cfw.addLoadThis();
-            cfw.addLoadConstant(toEventName(method.getName())); // event type
+            cfw.add(ByteCode.GETFIELD, cfw.getClassName(), "events", adapterSignature);
+            cfw.addLoadConstant(eventName); // event type
             cfw.addLoadConstant(paramLength);  // create args array
             cfw.add(ByteCode.ANEWARRAY, "java/lang/Object");
             for (int i = 0; i < paramLength; i++) {
@@ -213,8 +245,8 @@ public class EventAdapter extends ScriptableObject {
                 }
                 cfw.add(ByteCode.AASTORE);
             }
-            cfw.addInvoke(ByteCode.INVOKEVIRTUAL, className, "emit",
-                    "(Ljava/lang/String;[Ljava/lang/Object;)Z");
+            cfw.addInvoke(ByteCode.INVOKEVIRTUAL, EventAdapter.class.getName(),
+                    "emit", "(Ljava/lang/String;[Ljava/lang/Object;)Z");
             cfw.add(ByteCode.POP); // always discard result of emit()
             if (returnType == Void.TYPE) {
                 cfw.add(ByteCode.RETURN);
@@ -238,7 +270,7 @@ public class EventAdapter extends ScriptableObject {
                 cfw.add(ByteCode.ACONST_NULL);
                 cfw.add(ByteCode.ARETURN);
             }
-            cfw.stopMethod((short)(paramLength + 1));
+            cfw.stopMethod((short)(localsLength));
         }
 
         return cfw.toByteArray();
@@ -296,6 +328,8 @@ public class EventAdapter extends ScriptableObject {
      * Convert Java class to "Lname-with-dots-replaced-by-slashes;" form
      * suitable for use as JVM type signatures. This includes support
      * for arrays and primitive types such as int or boolean.
+     * @param clazz the class
+     * @return the signature
      */
     public static String classToSignature(Class<?> clazz) {
         if (clazz.isArray()) {
@@ -315,6 +349,13 @@ public class EventAdapter extends ScriptableObject {
         return ClassFileWriter.classNameToSignature(clazz.getName());
     }
 
+    /**
+     * A wrapper around a JavaScript function or (moduleId, functionName) pair.
+     * If callback is a function, the callback is bound to its current worker
+     * as the function is a closure over its scope. If the callback is a
+     * (moduleId, functionName) pair it is not bound to any worker as the
+     * module will be loaded on demand when the callback is invoked.
+     */
     class Callback {
         final RingoWorker worker;
         final Object module;
@@ -334,9 +375,9 @@ public class EventAdapter extends ScriptableObject {
                     throw Context.reportRuntimeError(
                             "Callback object must contain 'module' property");
                 }
-                if (this.function != NOT_FOUND || this.function == null) {
+                if (this.function == NOT_FOUND || this.function == null) {
                     throw Context.reportRuntimeError(
-                            "Callback object must contain 'app' property");
+                            "Callback object must contain 'name' property");
                 }
                 this.worker = null;
             }
@@ -365,7 +406,7 @@ public class EventAdapter extends ScriptableObject {
             }
         }
 
-        void invokeWithWorker(RingoWorker worker, Object[] args) {
+        private void invokeWithWorker(RingoWorker worker, Object[] args) {
             if (sync) {
                 try {
                     worker.invoke(module, function, args);

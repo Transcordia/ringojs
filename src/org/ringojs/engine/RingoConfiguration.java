@@ -26,8 +26,8 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Collections;
@@ -346,6 +346,7 @@ public class RingoConfiguration {
 
     public void setVerbose(boolean verbose) {
         this.verbose = verbose;
+        System.setProperty("ringo.verbose", String.valueOf(verbose));
     }
 
     public boolean getStrictVars() {
@@ -387,16 +388,47 @@ public class RingoConfiguration {
      * @throws IOException an I/O error occurred
      */
     public Resource getResource(String path) throws IOException {
+        return getResource(path, null);
+    }
+    /**
+     * Get a resource from our script repository
+     * @param path the resource path
+     * @param loaders optional list of module loaders
+     * @return the resource
+     * @throws IOException an I/O error occurred
+     */
+    public Resource getResource(String path, ModuleLoader[] loaders)
+            throws IOException {
         Resource res;
         for (Repository repo: repositories) {
-            res = repo.getResource(path);
+            if (loaders != null) {
+                assert loaders.length > 0 && loaders[0] != null;
+                for (ModuleLoader loader : loaders) {
+                    res = repo.getResource(path + loader.getExtension());
+                    if (res != null && res.exists()) {
+                        return res;
+                    }
+                }
+            } else {
+                res = repo.getResource(path);
+                if (res != null && res.exists()) {
+                    return res;
+                }
+            }
+        }
+        if (loaders == null) {
+            res = resourceFromClasspath(path, null);
             if (res != null && res.exists()) {
                 return res;
             }
-        }
-        res = resourceFromClasspath(path, null);
-        if (res != null && res.exists()) {
-            return res;
+        } else {
+            for (ModuleLoader loader : loaders) {
+                String p = path + loader.getExtension();
+                res = resourceFromClasspath(p, null);
+                if (res != null && res.exists()) {
+                    return res;
+                }
+            }
         }
         return new NotFound(path);
     }
@@ -523,13 +555,8 @@ public class RingoConfiguration {
             }
 
             if ("file".equals(url.getProtocol())) {
-                String path = url.getPath();
-                try {
-                    path = URLDecoder.decode(path, System.getProperty("file.encoding"));
-                } catch (UnsupportedEncodingException x) {
-                    System.err.println("Unable to decode jar URL: " + x);
-                }
-                return new ZipRepository(path);
+                String enc = Charset.defaultCharset().name();
+                return new ZipRepository(URLDecoder.decode(url.getPath(), enc));
             }
         }
         return null;
@@ -541,16 +568,16 @@ public class RingoConfiguration {
                 path.substring(0, path.length() - 1) : path;
         URL url = urlFromClasspath(canonicalPath, loader);
         if (url != null) {
-            String protocol = url.getProtocol();
-            if ("jar".equals(protocol) || "zip".equals(protocol)) {
+            String proto = url.getProtocol();
+            if ("jar".equals(proto) || "zip".equals(proto) || "wsjar".equals(proto)) {
                 Repository repo = toZipRepository(url);
                 return repo.getResource(path);
-            } else if ("file".equals(protocol)) {
-                return new FileResource(url.getPath());
+            } else if ("file".equals(proto)) {
+                String enc = Charset.defaultCharset().name();
+                return new FileResource(URLDecoder.decode(url.getPath(), enc));
             }
         }
         return null;
-
     }
 
     private static Repository repositoryFromClasspath(String path, ClassLoader loader)
@@ -558,12 +585,13 @@ public class RingoConfiguration {
         String canonicalPath = path.endsWith("/") ? path : path + "/";
         URL url = urlFromClasspath(canonicalPath, loader);
         if (url != null) {
-            String protocol = url.getProtocol();
-            if ("jar".equals(protocol) || "zip".equals(protocol)) {
+            String proto = url.getProtocol();
+            if ("jar".equals(proto) || "zip".equals(proto) || "wsjar".equals(proto)) {
                 Repository repo = toZipRepository(url);
                 return repo.getChildRepository(path);
-            } else if ("file".equals(protocol)) {
-                return new FileRepository(url.getPath());
+            } else if ("file".equals(proto)) {
+                String enc = Charset.defaultCharset().name();
+                return new FileRepository(URLDecoder.decode(url.getPath(), enc));
             }
         }
         return null;

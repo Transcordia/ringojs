@@ -21,7 +21,7 @@
     <!-- =================================================================== -->
     <target name="init">
         <property name="project" value="ringojs"/>
-        <property name="version" value="0.8"/>
+        <property name="version" value="0.9"/>
 
         <property name="home" value="."/>
 
@@ -55,7 +55,7 @@
     <!-- =================================================================== -->
     <target name="update">
         <ivy:retrieve type="jar" sync="true"
-            pattern="${ivy.lib.dir}/ivy/[artifact]-[revision].[ext]"/>
+            pattern="${ivy.lib.dir}/ivy/[originalname].[ext]"/>
     </target>
 
     <!-- =================================================================== -->

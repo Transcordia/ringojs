@@ -28,7 +28,7 @@ public interface Resource extends Trackable {
 
 
     /**
-     * Returns the lengh of the resource's content
+     * Returns the length of the resource's content
      * @return content length
      */
     public long getLength();
@@ -57,14 +57,16 @@ public interface Resource extends Trackable {
 
     /**
      * Returns the content of the resource in a given encoding
-     * @param encoding
-     * @return content
+     * @param encoding the character encoding
+     * @return the content
+     * @throws IOException if a I/O related error occurs
      */
     public String getContent(String encoding) throws IOException;
 
     /**
      * Returns the content of the resource
-     * @return content
+     * @return the content
+     * @throws IOException if a I/O related error occurs
      */
     public String getContent() throws IOException;
 
@@ -94,5 +96,12 @@ public interface Resource extends Trackable {
      * @param stripShebang true to enable shebang stripping
      */
     public void setStripShebang(boolean stripShebang);
+
+    /**
+     * Return the current line number of this resource. Useful in combination
+     * with things like shebang stripping and shell input.
+     * @return the current line number of this resource
+     */
+    public int getLineNumber();
 
 }

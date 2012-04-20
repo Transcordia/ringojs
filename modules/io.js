@@ -54,29 +54,37 @@ Stream.prototype.forEach = function(fn, thisObj) {
 };
 
 /**
- * In binary stream that reads from and/or writes to an in-memory byte array. If the stream
- * is writable, its internal buffer will automatically on demand.
- * @param {Binary|number} bufferOrCapacity the buffer to use, or the capacity of the buffer
- * to allocate . If this is a number, a ByteArray with the given length is allocated.
- * If this is a ByteArray, the resulting stream is both readable, writable, and seekable.
- * If this is a ByteString, the resulting stream is readable and seekable but not writable.
- * If undefined, a ByteArray of length 1024 is allocated as buffer.
+ * A binary stream that reads from and/or writes to an in-memory byte array.
+ *
+ * If the constructor is called with a Number argument, a ByteArray with the
+ * given length is allocated and the length of the stream is set to zero.
+ *
+ * If the argument is a [binary object][binary] it will be used as underlying
+ * buffer and the stream length set to the length of the binary object.
+ * If argument is a [ByteArray][binary#ByteArray], the resulting stream is both
+ * readable, writable, and seekable. If it is a [ByteString][binary#ByteString],
+ * the resulting stream is readable and seekable but not writable.
+ *
+ * If called without argument, a ByteArray of length 1024 is allocated as buffer.
+ *
+ * @param {Binary|Number} binaryOrNumber the buffer to use, or the initial
+ * capacity of the buffer to allocate.
  * @constructor
  */
-exports.MemoryStream = function MemoryStream(bufferOrCapacity) {
+exports.MemoryStream = function MemoryStream(binaryOrNumber) {
 
     var buffer, length;
-    if (!bufferOrCapacity) {
+    if (!binaryOrNumber) {
         buffer = new ByteArray(0);
         length = 0;
-    } else if (bufferOrCapacity instanceof Binary) {
-        buffer = bufferOrCapacity;
+    } else if (binaryOrNumber instanceof Binary) {
+        buffer = binaryOrNumber;
         length = buffer.length;
-    } else if (typeof bufferOrCapacity == "number") {
-        buffer = new ByteArray(bufferOrCapacity);
+    } else if (typeof binaryOrNumber == "number") {
+        buffer = new ByteArray(binaryOrNumber);
         length = 0;
     } else {
-        throw new Error("buffer argument must be Binary or undefined");
+        throw new Error("Argument must be Binary, Number, or undefined");
     }
 
     var stream = Object.create(Stream.prototype);
@@ -91,7 +99,11 @@ exports.MemoryStream = function MemoryStream(bufferOrCapacity) {
     }
 
     /**
-     * @name MemoryStream.instance.readable
+     * Returns true if the stream supports reading, false otherwise.
+     * Always returns true for MemoryStreams.
+     * @name MemoryStream.prototype.readable
+     * @see #Stream.prototype.readable
+     * @return {Boolean} true if stream is readable
      * @function
      */
     stream.readable = function() {
@@ -99,7 +111,12 @@ exports.MemoryStream = function MemoryStream(bufferOrCapacity) {
     };
 
     /**
-     * @name MemoryStream.instance.writable
+     * Returns true if the stream supports writing, false otherwise.
+     * For MemoryStreams this returns true if the wrapped binary is an
+     * instance of ByteArray.
+     * @name MemoryStream.prototype.writable
+     * @see #Stream.prototype.writable
+     * @return {Boolean} true if stream is writable
      * @function
      */
     stream.writable = function() {
@@ -107,7 +124,12 @@ exports.MemoryStream = function MemoryStream(bufferOrCapacity) {
     };
 
     /**
-     * @name MemoryStream.instance.seekable
+     * Returns true if the stream is randomly accessible and supports the length
+     * and position properties, false otherwise.
+     * Always returns true for MemoryStreams.
+     * @name MemoryStream.prototype.seekable
+     * @see #Stream.prototype.seekable
+     * @return {Boolean} true if stream is seekable
      * @function
      */
     stream.seekable = function() {
@@ -115,17 +137,24 @@ exports.MemoryStream = function MemoryStream(bufferOrCapacity) {
     };
 
     /**
-     * @name MemoryStream.instance.read
+     * Read up to `maxBytes` bytes from the stream, or until the end of the stream
+     * has been reached. If `maxBytes` is not specified, the full stream is read
+     * until its end is reached. Reading from a stream where the end has already been
+     * reached returns an empty ByteString.
+     * @name MemoryStream.prototype.read
+     * @param {Number} maxBytes the maximum number of bytes to read
+     * @returns {ByteString}
+     * @see #Stream.prototype.read
      * @function
      */
-    stream.read = function(num) {
+    stream.read = function(maxBytes) {
         checkClosed();
         var result;
-        if (isFinite(num)) {
-            if (num < 0) {
+        if (isFinite(maxBytes)) {
+            if (maxBytes < 0) {
                 throw new Error("read(): argument must not be negative");
             }
-            var end = Math.min(position + num, length);
+            var end = Math.min(position + maxBytes, length);
             result = ByteString.wrap(buffer.slice(position, end));
             position = end;
             return result;
@@ -137,7 +166,15 @@ exports.MemoryStream = function MemoryStream(bufferOrCapacity) {
     };
 
     /**
-     * @name MemoryStream.instance.readInto
+     * Read bytes from this stream into the given buffer. This method does
+     * *not* increase the length of the buffer.
+     * @name MemoryStream.prototype.readInto
+     * @param {ByteArray} buffer the buffer
+     * @param {Number} begin optional begin index, defaults to 0.
+     * @param {Number} end optional end index, defaults to buffer.length - 1.
+     * @returns {Number} The number of bytes read or -1 if the end of the stream
+     *          has been reached
+     * @see #Stream.prototype.readInto
      * @function
      */
     stream.readInto = function(target, begin, end) {
@@ -162,13 +199,20 @@ exports.MemoryStream = function MemoryStream(bufferOrCapacity) {
     };
 
     /**
-     * @name MemoryStream.instance.write
+     * Write bytes from b to this stream. If begin and end are specified,
+     * only the range starting at begin and ending before end is written.
+     * @name MemoryStream.prototype.write
+     * @param {Binary} source The source to be written from
+     * @param {Number} begin optional
+     * @param {Number} end optional
+     * @see #Stream.prototype.write
      * @function
      */
     stream.write = function(source, begin, end) {
         checkClosed();
         if (typeof source === "string") {
-            system.stderr.print("Warning: binary write called with string argument. Using default encoding");
+            system.stderr.print("Warning: binary write called with string argument. "
+                    + "Using default encoding");
             source = source.toByteString();
         }
         if (!(source instanceof Binary)) {
@@ -186,7 +230,8 @@ exports.MemoryStream = function MemoryStream(bufferOrCapacity) {
     };
 
     /**
-     * @name MemoryStream.instance.content
+     * The wrapped buffer.
+     * @name MemoryStream.prototype.content
      */
     Object.defineProperty(stream, "content", {
         get: function() {
@@ -195,7 +240,8 @@ exports.MemoryStream = function MemoryStream(bufferOrCapacity) {
     });
 
     /**
-     * @name MemoryStream.instance.length
+     * The number of bytes in the stream's underlying buffer.
+     * @name MemoryStream.prototype.length
      */
     Object.defineProperty(stream, "length", {
         get: function() {
@@ -212,7 +258,8 @@ exports.MemoryStream = function MemoryStream(bufferOrCapacity) {
     });
 
     /**
-     * @name MemoryStream.instance.position
+     * The current position of this stream in the wrapped buffer.
+     * @name MemoryStream.prototype.position
      */
     Object.defineProperty(stream, "position", {
         get: function() {
@@ -226,7 +273,12 @@ exports.MemoryStream = function MemoryStream(bufferOrCapacity) {
     });
 
     /**
-     * @name MemoryStream.instance.skip
+     * Try to skip over num bytes in the stream. Returns the number of acutal bytes skipped
+     * or throws an error if the operation could not be completed.
+     * @name Stream.prototype.skip
+     * @param {Number} num bytes to skip
+     * @returns {Number} actual bytes skipped
+     * @name MemoryStream.prototype.skip
      * @function
      */
     stream.skip = function(num) {
@@ -242,7 +294,8 @@ exports.MemoryStream = function MemoryStream(bufferOrCapacity) {
     };
 
     /**
-     * @name MemoryStream.instance.flush
+     * Flushes the bytes written to the stream to the underlying medium.
+     * @name MemoryStream.prototype.flush
      * @function
      */
     stream.flush = function() {
@@ -251,7 +304,7 @@ exports.MemoryStream = function MemoryStream(bufferOrCapacity) {
 
     /**
      * Closes the stream, freeing the resources it is holding.
-     * @name MemoryStream.instance.close
+     * @name MemoryStream.prototype.close
      * @function
      */
     stream.close = function() {
@@ -261,7 +314,8 @@ exports.MemoryStream = function MemoryStream(bufferOrCapacity) {
 
     /**
      * Returns true if the stream is closed, false otherwise.
-     * @name MemoryStream.instance.closed
+     * @name MemoryStream.prototype.closed
+     * @return {Boolean} true if the stream has been closed
      * @function
      */
     stream.closed = function() {
@@ -308,12 +362,16 @@ exports.TextStream = function TextStream(io, options, buflen) {
         encoder.writeTo(io);
     }
 
-    /** See `Stream.prototype.readable`. */
+    /**
+     * @see #Stream.prototype.readable
+     */
     this.readable = function() {
        return io.readable();
     };
 
-    /** See `Stream.prototype.writable`. */
+    /**
+     * @see #Stream.prototype.writable
+     */
     this.writable = function() {
         return io.writable();
     };
@@ -329,7 +387,7 @@ exports.TextStream = function TextStream(io, options, buflen) {
      * Reads a line from this stream. If the end of the stream is reached
      * before any data is gathered, returns an empty string. Otherwise, returns
      * the line including the newline.
-     * @returns {String}
+     * @returns {String} the next line
      */
     this.readLine = function () {
         var line = decoder.readLine(true);
@@ -339,16 +397,17 @@ exports.TextStream = function TextStream(io, options, buflen) {
     };
 
     /**
-     * Returns this stream (which also is an Iterator).
-     * @function
+     * Returns this stream.
+     * @return {TextStream} this stream
      */
-    this.iterator = this.__iterator__ = function () {
+    this.iterator = function () {
         return this;
     };
 
     /**
      * Returns the next line of input without the newline. Throws
      * `StopIteration` if the end of the stream is reached.
+     * @returns {String} the next line
      */
     this.next = function () {
         var line = decoder.readLine(false);
@@ -359,12 +418,15 @@ exports.TextStream = function TextStream(io, options, buflen) {
     };
     
     /**
-     * @param {Function} fn the callback function
+     * Calls `callback` with each line in the input stream.
+     * @param {Function} callback the callback function
      * @param {Object} [thisObj] optional this-object to use for callback
      */
     this.forEach = function (callback, thisObj) {
-        for (var line in this) {
+        var line = decoder.readLine(false);
+        while (line != null) {
             callback.call(thisObj, line);
+            line = decoder.readLine(false);
         }
     };
 
@@ -373,6 +435,7 @@ exports.TextStream = function TextStream(io, options, buflen) {
      * returns an empty string. The returned array does not include the final
      * empty string, but it does include a trailing newline at the end of every
      * line.
+     * @returns {Array} an array of lines
      */
     this.readLines = function () {
         var lines = [];
@@ -401,8 +464,8 @@ exports.TextStream = function TextStream(io, options, buflen) {
     };
 
     /**
-     * Reads from this stream with `readLine`, writing the results to the
-     * target stream and flushing, until the end of this stream is reached.
+     * Reads from this stream with [readLine][#readLine], writing the results
+     * to the target stream and flushing, until the end of this stream is reached.
      */
     this.copy = function (output) {
         while (true) {
@@ -414,6 +477,9 @@ exports.TextStream = function TextStream(io, options, buflen) {
         return this;
     };
 
+    /**
+     * Writes all arguments to the stream.
+     */
     this.write = function () {
         for (var i = 0; i < arguments.length; i++) {
             encoder.encode(String(arguments[i]));
@@ -422,7 +488,7 @@ exports.TextStream = function TextStream(io, options, buflen) {
     };
 
     /**
-     * Writes the given line, followed by a newline.
+     * Writes the given line to the stream, followed by a newline.
      */
     this.writeLine = function (line) {
         this.write(line + newline);
@@ -430,7 +496,7 @@ exports.TextStream = function TextStream(io, options, buflen) {
     };
 
     /**
-     * Writens the given lines, terminating each line with a newline.
+     * Writes the given lines to the stream, terminating each line with a newline.
      *
      * This is a non-standard extension, not part of CommonJS IO/A.
      */
@@ -455,17 +521,26 @@ exports.TextStream = function TextStream(io, options, buflen) {
         return this;
     };
 
-    /** See `Stream.prototype.flush`. */
+    /**
+     * @see #Stream.prototype.flush
+     */
     this.flush = function () {
         io.flush();
         return this;
     };
 
-    /** See `Stream.prototype.close`. */
+    /**
+     * @see #Stream.prototype.close
+     */
     this.close = function () {
         io.close();
     };
 
+    /**
+     * If the wrapped stream is a [MemoryStream][#MemoryStream] this contains its
+     * content decoded to a String with this streams encoding. Otherwise contains
+     * an empty String.
+     */
     Object.defineProperty(this, "content", {
         get: function() {
             var wrappedContent = io.content;
@@ -476,6 +551,9 @@ exports.TextStream = function TextStream(io, options, buflen) {
         }
     });
 
+    /**
+     * The wrapped binary stream.
+     */
     Object.defineProperty(this, "raw", {
         get: function() {
             return io;
@@ -489,31 +567,30 @@ exports.TextStream = function TextStream(io, options, buflen) {
  * Write bytes from b to this stream. If begin and end are specified, only the
  * range starting at begin and ending before end is written.
  * @name Stream.prototype.write
- * @param {Binary} b The source to be written from
+ * @param {Binary} source The source to be written from
  * @param {Number} begin optional
  * @param {Number} end optional
  * @function
  */
 
 /**
- * Read up to n bytes from the stream, or until the end of the stream has been
- * reached. If n is null, a block is read with a block-size specific to the
- * underlying device. If n is not specified, the full stream is read until its
- * end is reached. Reading from a stream where the end has been reached returns
- * an empty ByteString.
+ * Read up to `maxBytes` bytes from the stream, or until the end of the stream
+ * has been reached. If `maxBytes` is not specified, the full stream is read
+ * until its end is reached. Reading from a stream where the end has already been
+ * reached returns an empty ByteString.
  * @name Stream.prototype.read
- * @param {Number} n
+ * @param {Number} maxBytes the maximum number of bytes to read
  * @returns {ByteString}
  * @function
  */
 
 /**
  * Read bytes from this stream into the given buffer. This method does
- * <i>not</i> increase the length of the buffer.
+ * *not* increase the length of the buffer.
  * @name Stream.prototype.readInto
- * @param {ByteArray} buffer
- * @param {Number} begin
- * @param {Number} end
+ * @param {ByteArray} buffer the buffer
+ * @param {Number} begin optional begin index, defaults to 0.
+ * @param {Number} end optional end index, defaults to buffer.length - 1.
  * @returns {Number} The number of bytes read or -1 if the end of the stream
  *          has been reached
  * @function
@@ -543,12 +620,14 @@ exports.TextStream = function TextStream(io, options, buflen) {
 /**
  * Returns true if the stream has been closed, false otherwise.
  * @name Stream.prototype.closed
+ * @return {Boolean} true if the stream has been closed
  * @function
  */
 
 /**
  * Returns true if the stream supports reading, false otherwise.
  * @name Stream.prototype.readable
+ * @return {Boolean} true if stream is readable
  * @function
  */
 
@@ -556,12 +635,14 @@ exports.TextStream = function TextStream(io, options, buflen) {
  * Returns true if the stream is randomly accessible and supports the length
  * and position properties, false otherwise.
  * @name Stream.prototype.seekable
+ * @return {Boolean} true if stream is seekable
  * @function
  */
 
 /**
  * Returns true if the stream supports writing, false otherwise.
  * @name Stream.prototype.writable
+ * @return {Boolean} true if stream is writable
  * @function
  */
 
@@ -572,12 +653,14 @@ exports.TextStream = function TextStream(io, options, buflen) {
  */
 
 /**
+ * The wrapped `java.io.InputStream`.
  * @name Stream.prototype.inputStream
  * @property
  * @type java.io.InputStream
  */
 
 /**
+ * The wrapped `java.io.OutputStream`.
  * @name Stream.prototype.outputStream
  * @property
  * @type java.io.OutputStream

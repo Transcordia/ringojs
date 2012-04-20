@@ -12,8 +12,7 @@
 
 // stdlib
 var strings = require('ringo/utils/strings');
-var {parseResource} = require('ringo/jsdoc');
-var {ScriptRepository} = require('ringo/jsdoc');
+var {parseResource, ScriptRepository} = require('ringo/jsdoc');
 var {join, base, directory, canonical} = require('fs');
 
 /**
@@ -29,35 +28,45 @@ var getRepositoryName = exports.getRepositoryName = function(repositoryOrPath) {
 
 /**
  * Returns a name sorted, stringify-able list of objects describing the
- * modules for the given repositoryPath.
+ * modules for the given repository.
  *
- * @param {String} repositoryPath
+ * @param {Object} repository repository descriptor
  * @param {Boolean} moduleFileOverview if true every module will be parsed and
  *                  it's fileoverview attached. default: false.
  * @returns {Array} modules
  */
-var moduleList = exports.moduleList = function(repositoryPath, moduleFileOverview) {
-    var repository = new ScriptRepository(repositoryPath);
-    var modules = repository.getScriptResources(true).filter(function(r) {
+var moduleList = exports.moduleList = function(repository, moduleFileOverview) {
+    var packageName = repository.package.name;
+    var mainModule = repository.package.main;
+    var scriptRepository = new ScriptRepository(repository.path);
+    return scriptRepository.getScriptResources(true).filter(function(r) {
         return !r.moduleName.match(/^ringo\/?global$/);
     }).map(function(mod) {
         var fileoverview = undefined;
-        if (moduleFileOverview == true) {
+        if (moduleFileOverview) {
             var docItems = parseResource(mod);
             fileoverview = docItems.fileoverview && docItems.fileoverview.getTag('fileoverview') || '';
         }
+        var id = mod.moduleName.replace(/\./g,'/');
+        var name = id;
+        // If this is a package adjust module names according to package loading
+        // conventions: use just the package name for main module and prepend
+        // the package name to all other modules.
+        if (mainModule && mainModule == mod)
+            name = packageName || name;
+        else if (packageName && packageName != id)
+            name = packageName + '/' + id;
         return {
-            id: mod.moduleName.replace(/\./g,'/'),
+            id: id,
+            name: name,
             fileoverview: fileoverview
         }
     }).sort(function(a, b) {
         // sort modules by namespace depth first, then lexographically
-        var level = strings.count(a.id, '/') - strings.count(b.id, '/');
+        var level = strings.count(a.name, '/') - strings.count(b.name, '/');
         if (level != 0) return level;
-        return a.id > b.id ? 1 : -1;
+        return a.name > b.name ? 1 : -1;
     });
-
-   return modules;
 };
 
 /**
@@ -75,22 +84,22 @@ var repositoryList = exports.repositoryList = function(repositoryPaths) {
 /**
  * @returns {Array} objects with jsdoc information for each property defined in module
  */
-var moduleDoc = exports.moduleDoc = function(repositoryPath, moduleId) {
+var moduleDoc = exports.moduleDoc = function(repositoryPath, module, toLink) {
     var repository = new ScriptRepository(repositoryPath);
-    var res = repository.getScriptResource(moduleId + '.js');
+    var res = repository.getScriptResource(module.id + '.js');
     if (!res.exists()) {
         return null;
     }
     var docItems = parseResource(res);
 
     var doc = {};
-    doc.name = moduleId;
+    doc.name = module.name;
     if (docItems.fileoverview) {
         doc.fileoverview = docItems.fileoverview.getTag('fileoverview');
         doc.example = docItems.fileoverview.getTag('example');
         doc.since = docItems.fileoverview.getTag('since');
         doc.deprecated = docItems.fileoverview.getTag('deprecated');
-        doc.sees = getSees(docItems.fileoverview);
+        doc.sees = getSees(docItems.fileoverview, toLink);
     }
     // tags for all items in this module
     var items = [];
@@ -119,7 +128,7 @@ var moduleDoc = exports.moduleDoc = function(repositoryPath, moduleId) {
             isStatic: isStatic(docItem, next),
             parameters: getParameters(docItem),
             throws: getThrows(docItem),
-            sees: getSees(docItem),
+            sees: getSees(docItem, toLink),
             returns: getReturns(docItem),
             // standard
             example:  docItem.getTag('example'),
@@ -154,7 +163,7 @@ var moduleDoc = exports.moduleDoc = function(repositoryPath, moduleId) {
 exports.structureModuleDoc = function(data) {
 
     // need to store module id in every item to get access to it during
-    // mustache renering
+    // mustache rendering
     data.items.forEach(function(i) {
         i.moduleName = data.name;
     });
@@ -268,15 +277,17 @@ function getRelatedClass(item) {
     }).join('.');
 }
 
-function getSees(item) {
+function getSees(item, getLink) {
     return item.getTags('see').map(function(link) {
+        var input = link;
         if (strings.isUrl(link)) {
             link = '<a href="' + link + '">' + link + '</a>';
-        } else {
-            // apply some sanity checks to local targets like removing hashes and parantheses
-            link = link.replace(/^#/, '');
-            var id = link.replace(/[\(\)]/g, '');
-            link = '<a href="#' + id + '">' + link + '</a>';
+        } else if (typeof getLink === "function") {
+            // apply some sanity checks to local targets like removing parentheses
+            var target = getLink(link.replace(/[\(\)]/g, ''));
+            if (target) {
+                link = '<a href="' + target[0] + '">' + target[1] + '</a>';
+            }
         }
         return link;
     });

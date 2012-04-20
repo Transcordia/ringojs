@@ -245,17 +245,14 @@ function printValue(value, writer, nesting) {
  * @param {Exception} xcept
  * @param {Boolean} verbose
  */
-function printError(xcept, verbose) {
+function printError(xcept, errors, verbose) {
     if (xcept instanceof org.mozilla.javascript.RhinoException) {
-        term.writeln(term.BOLD, term.RED, xcept.getMessage());
+        term.writeln(term.BOLD, term.RED, xcept.details());
     } else {
         term.writeln(term.BOLD, term.RED, xcept.toString());
     }
-    var errors = org.ringojs.engine.RhinoEngine.errors.get();
-    if (errors != null && !errors.isEmpty()) {
-        for (var error in errors) {
-            term.writeln(term.GREEN, error);
-        }
+    for (var i = 0, l = errors.length; i < l; i++) {
+        term.writeln(term.GREEN, errors[i]);
     }
     if (typeof xcept.getScriptStackTrace === "function") {
         term.write(xcept.getScriptStackTrace());
