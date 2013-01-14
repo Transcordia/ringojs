@@ -1,10 +1,12 @@
 var assert = require("assert");
-var {request, post, get, put, del} = require('ringo/httpclient');
-var {Server} = require('ringo/httpserver');
-var {html, json, notFound} = require('ringo/jsgi/response');
-var {parseParameters, setCookie} = require('ringo/utils/http');
-var {ByteArray} = require('binary');
-var base64 = require('ringo/base64');
+var {Server} = require("ringo/httpserver");
+var response = require("ringo/jsgi/response");
+var {request, post, get, put, del, TextPart, BinaryPart} = require("ringo/httpclient");
+var {parseParameters, parseFileUpload, setCookie} = require("ringo/utils/http");
+var {MemoryStream, TextStream} = require("io");
+var fs = require("fs");
+var base64 = require("ringo/base64");
+var {ByteArray} = require("binary");
 
 var server;
 var host = "127.0.0.1";
@@ -29,8 +31,8 @@ exports.setUp = function() {
     };
 
     var config = {
-       host: host,
-       port: port
+        host: host,
+        port: port
     };
 
     server = new Server(config);
@@ -54,48 +56,54 @@ exports.tearDown = function() {
  * tests rely on that.
  */
 exports.testCallbacksGetCalled = function() {
-   getResponse = function(req) {
-      return html('');
-   };
+    getResponse = function(req) {
+      return response.html("");
+    };
 
-   var successCalled, completeCalled, errorCalled;
-   var exchange = request({
-      url: baseUri,
-      success: function() {
-         successCalled = true;
-      },
-      complete: function() {
-         completeCalled = true;
-      },
-      error: function() {
-         errorCalled = true;
-      }
-   });
-   assert.isTrue(successCalled);
-   assert.isTrue(completeCalled);
-   assert.isUndefined(errorCalled);
+    var beforeSendCalled, successCalled, completeCalled, errorCalled;
+    request({
+        "url": baseUri,
+        "beforeSend": function(exchange) {
+            beforeSendCalled = true;
+        },
+        "success": function(data, status, contentType, exchange) {
+            successCalled = true;
+        },
+        "complete": function(data, status, contentType, exchange) {
+            completeCalled = true;
+        },
+        "error": function(message, status, exchange) {
+            errorCalled = true;
+        }
+    });
+    assert.isTrue(beforeSendCalled);
+    assert.isTrue(successCalled);
+    assert.isTrue(completeCalled);
+    assert.isUndefined(errorCalled);
 };
 
 /**
  * test basic get
  */
 exports.testBasic = function() {
-   getResponse = function(req) {
-      return html('<h1>This is the Response Text</h1>');
-   };
+    var text = "<h1>This is the Response Text</h1>";
 
-   var errorCalled, myData;
-   var exchange = request({
-      url: baseUri,
-      success: function(data, status, contentType, exchange) {
-         myData = data;
-      },
-      error: function() {
-         errorCalled = true;
-      }
-   });
-   assert.isUndefined(errorCalled);
-   assert.strictEqual(myData, '<h1>This is the Response Text</h1>');
+    getResponse = function(req) {
+        return response.html(text);
+    };
+
+    var errorCalled, myData;
+    var exchange = request({
+        url: baseUri,
+        success: function(data, status, contentType, exchange) {
+            myData = data;
+        },
+        error: function() {
+            errorCalled = true;
+        }
+    });
+    assert.isUndefined(errorCalled);
+    assert.strictEqual(myData, text);
 };
 
 /**
@@ -106,7 +114,7 @@ exports.testUserInfo = function() {
     var log;
     getResponse = function(req) {
         log.push(req.headers["authorization"]);
-        return html("response text");
+        return response.html("response text");
     };
 
     // username and password in url
@@ -129,8 +137,7 @@ exports.testUserInfo = function() {
     assert.equal(log.length, 1, "precedence - one request");
     assert.equal(typeof log[0], "string", "precedence - one Authorization header");
     assert.equal(log[0], "Basic " + base64.encode("realuser:realpass"), "precedence - Basic auth header");
-
-}
+};
 
 /**
  * test servlet on request env (this is not httpclient specific, but uses same setUp tearDown)
@@ -140,7 +147,7 @@ exports.testServlet = function() {
     var servlet;
     getResponse = function(req) {
         servlet = req.env.servlet;
-        return html("servlet set");
+        return response.html("servlet set");
     };
 
     var errorCalled, myData;
@@ -158,7 +165,6 @@ exports.testServlet = function() {
     assert.ok(servlet instanceof javax.servlet.http.HttpServlet, "servlet instance");
 };
 
-
 /**
  * convenience wrappers
  */
@@ -168,31 +174,30 @@ exports.testConvenience = function() {
         var input = req.method == "POST" ? req.input.read() : req.queryString;
         parseParameters(input, params);
         if (params.foo) {
-            return html(req.method + ' with param');
+            return response.html(req.method + " with param");
         }
-        return html(req.method);
+        return response.html(req.method);
     };
     var x = post(baseUri);
-    assert.strictEqual(200, x.status);
-    assert.strictEqual('POST', x.content);
+    assert.strictEqual(x.status, 200);
+    assert.strictEqual(x.content, "POST");
 
     x = post(baseUri, {foo: 'bar'});
-    assert.strictEqual(200, x.status);
-    assert.strictEqual('POST with param', x.content);
+    assert.strictEqual(x.status, 200);
+    assert.strictEqual(x.content, "POST with param");
 
     x = get(baseUri, {foo: 'bar'});
-    assert.strictEqual(200, x.status);
-    assert.strictEqual('GET with param', x.content);
+    assert.strictEqual(x.status, 200);
+    assert.strictEqual(x.content, "GET with param");
 
     x = del(baseUri);
-    assert.strictEqual(200, x.status);
-    assert.strictEqual('DELETE', x.content);
+    assert.strictEqual(x.status, 200);
+    assert.strictEqual(x.content, "DELETE");
 
     x = put(baseUri);
-    assert.strictEqual(200, x.status);
-    assert.strictEqual('PUT', x.content);
+    assert.strictEqual(x.status, 200);
+    assert.strictEqual(x.content, "PUT");
 };
-
 
 /**
  * GET, POST params
@@ -202,7 +207,7 @@ exports.testParams = function() {
         var params = {};
         var input = req.method == "POST" ? req.input.read() : req.queryString;
         parseParameters(input, params);
-        return json(params);
+        return response.json(params);
     };
     var data = {
         a: "fääßß",
@@ -215,18 +220,16 @@ exports.testParams = function() {
         method: 'GET',
         data: data
     });
-    assert.strictEqual(200, getExchange.status);
-    var receivedData = JSON.parse(getExchange.content);
-    assert.deepEqual(data, receivedData);
+    assert.strictEqual(getExchange.status, 200);
+    assert.deepEqual(JSON.parse(getExchange.content), data);
 
     var postExchange = request({
         url: baseUri,
         method: 'POST',
         data: data
     });
-    assert.strictEqual(200, postExchange.status);
-    receivedData = JSON.parse(postExchange.content);
-    assert.deepEqual(data, receivedData);
+    assert.strictEqual(postExchange.status, 200);
+    assert.deepEqual(JSON.parse(postExchange.content), data);
 };
 
 /**
@@ -235,9 +238,9 @@ exports.testParams = function() {
 exports.testCallbacks = function() {
     getResponse = function(req) {
         if (req.pathInfo == '/notfound') {
-            return notFound('error');
+            return response.notFound('error');
         } else if (req.pathInfo == '/success') {
-            return json('success');
+            return response.json('success');
         } else if (req.pathInfo == '/redirect') {
             return {
                 status: 302,
@@ -245,7 +248,7 @@ exports.testCallbacks = function() {
                 body: ["Found: " + '/redirectlocation']
             };
         } else if (req.pathInfo == '/redirectlocation') {
-            return html('redirect success');
+            return response.html('redirect success');
         }
     };
     var myStatus, successCalled, errorCalled, myMessage, myContentType, myData;
@@ -282,7 +285,7 @@ exports.testCallbacks = function() {
         }
     });
     assert.strictEqual('application/json; charset=utf-8', myContentType);
-    assert.strictEqual(200, myStatus);
+    assert.strictEqual(myStatus, 200);
     assert.isUndefined(errorCalled);
 
     var getRedirectExchange = request({
@@ -296,7 +299,7 @@ exports.testCallbacks = function() {
             errorCalled = true;
         }
     });
-    assert.strictEqual(200, myStatus);
+    assert.strictEqual(myStatus, 200);
     assert.strictEqual('redirect success', myData);
     assert.isUndefined(errorCalled);
 };
@@ -305,39 +308,50 @@ exports.testCallbacks = function() {
  * Cookie set and read
  */
 exports.testCookie = function() {
-    var COOKIE_NAME = 'testcookie'
-    var COOKIE_VALUE = 'cookie value with s p   a c es';
+    var COOKIE_NAME = "testcookie";
+    var COOKIE_VALUE = "cookie value with s p   a c es";
+    var COOKIE_DAYS = 5;
 
     getResponse = function(req) {
         var params = {};
         parseParameters(req.queryString, params);
         // set cookie
-        var res = html('cookie set');
-        res.headers['Set-Cookie'] = setCookie(COOKIE_NAME, params.cookievalue, 5);
+        var res = response.html("cookie set");
+        res.headers["Set-Cookie"] = setCookie(COOKIE_NAME,
+                params.cookievalue, COOKIE_DAYS, {
+                    "domain": "localhost",
+                    "secure": true
+                });
         return res;
     };
 
     // receive cookie
-    var myStatus, myExchange, errorCalled;
+    var myStatus, myRequest, errorCalled;
     request({
         url: baseUri,
-        method: 'GET',
-        data: {'cookievalue': COOKIE_VALUE},
-        complete: function(data, status, contentType, exchange) {
+        method: "GET",
+        data: {
+            "cookievalue": COOKIE_VALUE
+        },
+        complete: function(data, status, contentType, request) {
             myStatus = status;
         },
-        success: function(data, status, contentType, exchange) {
-            myExchange = exchange;
+        success: function(data, status, contentType, request) {
+            myRequest = request;
         },
         error: function() {
             errorCalled = true;
         }
     });
     assert.isUndefined(errorCalled);
-    assert.strictEqual(200, myStatus);
-    assert.strictEqual(COOKIE_VALUE, myExchange.cookies[COOKIE_NAME].value);
+    assert.strictEqual(myStatus, 200);
+    var cookie = myRequest.cookies[COOKIE_NAME];
+    assert.strictEqual(cookie.value, COOKIE_VALUE);
+    // FIXME: why is -1 necessary?
+    assert.strictEqual(cookie.maxAge, (5 * 24 * 60 * 60) - 1);
+    assert.strictEqual(cookie.domain, "localhost");
+    assert.strictEqual(cookie.isSecure, true);
 };
-
 
 /**
  * send stream and get the same stream back
@@ -345,33 +359,30 @@ exports.testCookie = function() {
 exports.testStreamRequest = function() {
 
     getResponse = function(req) {
-        if (req.method == "POST") {
-            var input;
-            return {
-                    status: 200,
-                    headers: {
-                        'Content-Type': 'image/png'
-                    },
-                    body: {
-                        forEach: function(fn) {
-                            var read, bufsize = 8192;
-                            var buffer = new ByteArray(bufsize);
-                            input = req.input;
-                            while ((read = input.readInto(buffer)) > -1) {
-                                buffer.length = read;
-                                fn(buffer);
-                                buffer.length = bufsize;
-                            }
-                        },
-                        close: function() {
-                            if (input) {
-                                input.close();
-                            }
-                        }
+        var input;
+        return {
+            status: 200,
+            headers: {
+                'Content-Type': 'image/png'
+            },
+            body: {
+                forEach: function(fn) {
+                    var read, bufsize = 8192;
+                    var buffer = new ByteArray(bufsize);
+                    input = req.input;
+                    while ((read = input.readInto(buffer)) > -1) {
+                        buffer.length = read;
+                        fn(buffer);
+                        buffer.length = bufsize;
                     }
-                };
-
-        }
+                },
+                close: function() {
+                    if (input) {
+                        input.close();
+                    }
+                }
+            }
+        };
     };
 
     var resource = getResource('./upload_test.png');
@@ -397,12 +408,163 @@ exports.testStreamRequest = function() {
     });
     assert.isUndefined(errorCalled);
     assert.isNotNull(myExchange);
-    assert.strictEqual (inputByteArray.length, myExchange.contentBytes.length);
-    assert.deepEqual (inputByteArray.toArray(), myExchange.contentBytes.toArray());
-    assert.strictEqual('image/png', myContentType);
+    assert.strictEqual(myExchange.contentBytes.length, inputByteArray.length);
+    assert.deepEqual(myExchange.contentBytes.toArray(), inputByteArray.toArray());
+    assert.strictEqual(myContentType, "image/png");
+};
+
+exports.testPost = function() {
+
+    getResponse = function(req) {
+        var input;
+        return {
+            "status": 200,
+            "headers": {
+                "Content-Type": "application/octet-stream"
+            },
+            "body": {
+                forEach: function(fn) {
+                    var read, bufsize = 8192;
+                    var buffer = new ByteArray(bufsize);
+                    input = req.input;
+                    while ((read = input.readInto(buffer)) > -1) {
+                        buffer.length = read;
+                        fn(buffer);
+                        buffer.length = bufsize;
+                    }
+                },
+                close: function() {
+                    if (input) {
+                        input.close();
+                    }
+                }
+            }
+        };
+    };
+
+    // use this module's source as test data
+    var data = fs.read(module.path);
+    var inputByteArray = data.toByteArray();
+
+    // POSTing byte array
+    var req = request({
+        url: baseUri,
+        method: "POST",
+        data: inputByteArray
+    });
+    assert.strictEqual(req.status, 200);
+    assert.strictEqual(req.contentBytes.length, inputByteArray.length);
+    assert.deepEqual(req.contentBytes.toArray(), inputByteArray.toArray());
+
+    // POSTing memory stream
+    req = request({
+        url: baseUri,
+        method: "POST",
+        data: new MemoryStream(inputByteArray)
+    });
+    assert.strictEqual(req.status, 200);
+    assert.strictEqual(req.contentBytes.length, inputByteArray.length);
+    assert.deepEqual(req.contentBytes.toArray(), inputByteArray.toArray());
+
+    // POSTing text stream
+    req = request({
+        url: baseUri,
+        method: "POST",
+        data: new TextStream(new MemoryStream(data.toByteString()), {charset: "utf-8"})
+    });
+    assert.strictEqual(req.status, 200);
+    assert.strictEqual(req.contentBytes.length, inputByteArray.length);
+    assert.deepEqual(req.contentBytes.toArray(), inputByteArray.toArray());
+
+    // POSTing java.io.InputStream
+    req = request({
+        url: baseUri,
+        method: "POST",
+        data: fs.openRaw(module.path).unwrap()
+    });
+    assert.strictEqual(req.status, 200);
+    assert.strictEqual(req.contentBytes.length, inputByteArray.length);
+    assert.deepEqual(req.contentBytes.toArray(), inputByteArray.toArray());
+
+    var resource = getResource('./upload_test.png');
+    var inputStream = resource.getInputStream();
+    // small <1k file, just read it all in
+    var size = resource.getLength();
+    inputByteArray = new ByteArray(size);
+    inputStream.read(inputByteArray, 0, size);
+    var errorCalled;
+    request({
+        url: baseUri,
+        method: "POST",
+        data: resource.getInputStream(),
+        error: function() {
+            errorCalled = true;
+        },
+        complete: function(data, status, contentType, exchange) {
+            req = exchange;
+        }
+    });
+    assert.isUndefined(errorCalled);
+    assert.strictEqual(inputByteArray.length, req.contentBytes.length);
+    assert.deepEqual(inputByteArray.toArray(), req.contentBytes.toArray());
+};
+
+exports.testPostMultipart = function() {
+
+    var textFile = module.resolve("text_test.txt");
+    var imageFile = module.resolve("upload_test.png");
+    var received = {};
+
+    getResponse = function(req) {
+        var encoding = req.env.servletRequest.getCharacterEncoding() || "utf8";
+        var params = parseFileUpload(req, {}, encoding);
+        for (let [key, value] in Iterator(params)) {
+            received[key] = value;
+        }
+        return response.html("OK");
+    };
+
+    var title = "testing multipart post";
+    var textStream = fs.open(textFile, {"read": true, "charset": "utf-8"});
+    var textFileStream = fs.open(textFile, {"read": true, "charset": "utf-8"});
+    var binaryStream = fs.open(imageFile, {"read": true, "binary": true});
+
+    var inputStream = fs.open(imageFile, {"read": true, "binary": true});
+    // small <1k file, just read it all in
+    var size = fs.size(imageFile);
+    var imageByteArray = new ByteArray(size);
+    inputStream.readInto(imageByteArray, 0, size);
+
+    var exchange = request({
+        url: baseUri,
+        method: "POST",
+        contentType: "multipart/form-data",
+        data: {
+            "title": new TextPart(title, "utf-8"),
+            "text": new TextPart(textStream, "utf-8"),
+            "textfile": new TextPart(textFileStream, "utf-8", fs.base(textFile)),
+            "image": new BinaryPart(binaryStream, "image.png")
+        }
+    });
+    assert.strictEqual(exchange.status, 200);
+    assert.strictEqual(received.title, title);
+    // normalize line feeds, otherwise test fails on windows
+    var expectedText = fs.read(textFile).replace(/\r\n/g, "\n");
+    assert.strictEqual(received.text, expectedText);
+    assert.isNotUndefined(received.textfile);
+    assert.strictEqual(received.textfile.filename, fs.base(textFile));
+    assert.strictEqual(received.textfile.value.decodeToString(), expectedText);
+    assert.isNotUndefined(received.image);
+    assert.strictEqual(received.image.value.length, imageByteArray.length);
+    assert.deepEqual(received.image.value.toArray(), imageByteArray.toArray());
 };
 
 // start the test runner if we're called directly from command line
 if (require.main == module.id) {
-    system.exit(require("test").run(exports));
+    var {run} = require("test");
+    var system = require("system");
+    if (system.args.length > 1) {
+        system.exit(run(exports, system.args.pop()));
+    }
+    system.exit(run(exports));
 }

@@ -1,21 +1,25 @@
-<!DOCTYPE html >
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>{{title}}</title>
 
-<html lang="de" dir="ltr">
-<head>
-    <title>{{title}}</title>
-    <link rel="shortcut icon" href="http://ringojs.org/favicon.ico" type="image/x-icon" />
-    <link rel="icon" href="http://ringojs.org/favicon.ico" type="image/x-icon" />
-    <link rel="stylesheet" href="{{rootPath}}static/style.css" />
-    {{{head}}}
-</head>
+        <link rel="shortcut icon" href="http://ringojs.org/favicon.ico" type="image/x-icon" />
+        <link rel="icon" href="http://ringojs.org/favicon.ico" type="image/x-icon" />
+        {{{head}}}
 
-<body>
-<div class="wrap">
-{{{content}}}
-    <div class="menu" style="margin-top: 1em; font-size: 13px;">
-    {{repositoryName}}<br/>
-    {{{menu}}}
-</div>
-</div>
-</body>
+  </head>
+
+  <body class="jsdoc standalone">
+    <div class="main">
+        <div class="content jsdoc">
+        {{{content}}}
+        </div>
+
+        <nav class="jsdoc standalone">
+            <h1>{{repositoryName}}</h1>
+            {{{menu}}}
+        </nav>
+    </div>
+    </body>
 </html>

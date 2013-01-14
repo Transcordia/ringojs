@@ -50,6 +50,7 @@ function installPackage(url, options) {
                 || fail("package.json does not contain a package name");
         var dir = fs.join(directory, name);
         if (fs.exists(dir)) {
+            zip.close();
             if (!options.force)
                 throw new Error("Package already installed: " + dir);
             print("Removing currently installed version of package " + name);
@@ -73,6 +74,7 @@ function installPackage(url, options) {
                 fs.touch(path, entry.time);
             }
         }
+        zip.close();
         // create symlinks for binaries and make executable
         var bindir = fs.join(dir, "bin");
         if (fs.isDirectory(bindir)) {
@@ -80,7 +82,11 @@ function installPackage(url, options) {
             for each (var bin in fs.list(bindir)) {
                 var binfile = fs.join(bindir, bin);
                 fs.changePermissions(binfile, 0755);
-                fs.symbolicLink(binfile, fs.join(ringoBin, bin));
+                if (/^windows/i.test(java.lang.System.getProperty("os.name"))) {
+                    fs.copy(binfile, fs.join(ringoBin, bin));
+                } else {
+                    fs.symbolicLink(binfile, fs.join(ringoBin, bin));
+                }
             }
         }
         print("Done");

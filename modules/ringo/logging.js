@@ -20,7 +20,8 @@ var {EventEmitter} = require('ringo/events');
 
 export('getLogger', 'setConfig', 'getScriptStack', 'getJavaStack');
 
-var configured = false;
+// Use singleton to share flag across workers to avoid unwanted reconfiguration
+var configured = module.singleton("configured");
 // interval id for configuration watcher
 var configWatcher;
 
@@ -127,7 +128,6 @@ function setConfig(resource, watchForUpdates) {
         if (watchForUpdates) {
             try {
                 // set up a scheduler to watch the configuration file for changes
-                var {setInterval, clearInterval} = require("./scheduler");
                 var lastModified = resource.lastModified();
                 if (configWatcher) {
                     clearInterval(configWatcher);
@@ -143,8 +143,8 @@ function setConfig(resource, watchForUpdates) {
             }
         }
     }
-    configured = true;
-};
+    configured = module.singleton("configured", function() true);
+}
 
 /**
  * Get a logger for the given name.
@@ -261,6 +261,7 @@ function Log4jLogger(name) {
 
     if (!configured) {
         setConfig(getResource('config/log4j.properties'));
+        configured = module.singleton("configured", function() true);
     }
     var Level = org.apache.log4j.Level;
     var log = org.apache.log4j.LogManager.getLogger(name);
@@ -315,6 +316,7 @@ function Slf4jLogger(name) {
 
     if (!configured) {
         setConfig(getResource('config/log4j.properties'));
+        configured = module.singleton("configured", function() true);
     }
     var log = org.slf4j.LoggerFactory.getLogger(name);
 

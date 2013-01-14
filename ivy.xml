@@ -1,10 +1,9 @@
 <ivy-module version="2.0">
     <info organisation="org.ringojs" module="ringojs"/>
     <dependencies>
-        <!-- rhino -->
-        <dependency org="org.mozilla" name="rhino" rev="1.7R3"/>
+        <!-- rhino - disabled until we get 1.7R5 rhino release into maven central -->
+        <!-- dependency org="org.mozilla" name="rhino" rev="1.7R4"/-->
         <!-- jetty -->
-        <dependency org="org.eclipse.jetty" name="jetty-client" rev="7.5.+"/>
         <dependency org="org.eclipse.jetty" name="jetty-server" rev="7.5.+"/>
         <dependency org="org.eclipse.jetty" name="jetty-servlet" rev="7.5.+"/>
         <dependency org="org.eclipse.jetty" name="jetty-websocket" rev="7.5.+"/>
@@ -19,7 +18,12 @@
         <!-- jnr-posix -->
         <dependency org="org.jruby.extras" name="jaffl" rev="0.5.+"/>
         <dependency org="org.jruby.ext.posix" name="jnr-posix" rev="1.1.+"/>
+        <dependency org="org.jruby.extras" name="jffi" rev="1.0.+">
+            <artifact name="jffi" type="jar"/>
+        </dependency>
         <!-- junit -->
         <dependency org="junit" name="junit" rev="3.8.+"/>
+        <!-- jline -->
+        <dependency org="jline" name="jline" rev="1.0"/>
     </dependencies>
 </ivy-module>

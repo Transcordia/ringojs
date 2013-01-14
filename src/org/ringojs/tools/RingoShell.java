@@ -22,7 +22,7 @@ import jline.History;
 import org.ringojs.engine.ModuleScope;
 import org.ringojs.engine.ReloadableScript;
 import org.ringojs.engine.RhinoEngine;
-import org.ringojs.engine.RingoConfiguration;
+import org.ringojs.engine.RingoConfig;
 import org.ringojs.engine.RingoWorker;
 import org.ringojs.engine.ScriptError;
 import org.ringojs.repository.Repository;
@@ -46,7 +46,7 @@ import java.security.CodeSigner;
  */
 public class RingoShell {
 
-    RingoConfiguration config;
+    RingoConfig config;
     RhinoEngine engine;
     RingoWorker worker;
     Scriptable scope;
@@ -63,9 +63,9 @@ public class RingoShell {
         this.config = engine.getConfig();
         this.engine = engine;
         this.history = history;
-    	this.scope = engine.getShellScope();
-        this.silent = silent;
         this.worker = engine.getWorker();
+        this.scope = engine.getShellScope(worker);
+        this.silent = silent;
         // FIXME give shell code a trusted code source in case security is on
         if (config.isPolicyEnabled()) {
             Repository modules = config.getRingoHome().getChildRepository("modules");

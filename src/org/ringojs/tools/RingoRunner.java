@@ -20,7 +20,7 @@ import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.WrappedException;
 import org.ringojs.engine.ModuleScope;
 import org.ringojs.engine.RhinoEngine;
-import org.ringojs.engine.RingoConfiguration;
+import org.ringojs.engine.RingoConfig;
 import org.ringojs.engine.RingoWrapFactory;
 import org.ringojs.engine.ScriptError;
 import org.ringojs.repository.FileRepository;
@@ -45,7 +45,7 @@ import java.io.PrintStream;
 
 public class RingoRunner {
 
-    RingoConfiguration config;
+    RingoConfig config;
     RhinoEngine engine;
     Context cx;
     Scriptable module;
@@ -74,7 +74,7 @@ public class RingoRunner {
         {"H", "history", "Use custom history file (default: ~/.ringo-history)", "FILE"},
         {"i", "interactive", "Start shell after script file has run", ""},
         {"l", "legacy-mode", "Enable __parent__ and __proto__ and suppress warnings", ""},
-        {"m",  "modules", "Add a directory to the module search path", "DIR"},
+        {"m", "modules", "Add a directory to the module search path", "DIR"},
         {"o", "optlevel", "Set Rhino optimization level (-1 to 9)", "OPT"},
         {"p", "production", "Disable module reloading and warnings", ""},
         {"P", "policy", "Set java policy file and enable security manager", "URL"},
@@ -123,7 +123,7 @@ public class RingoRunner {
         String[] systemModulePath = {"modules", "packages"};
         String[] userModulePath = userModules.toArray(new String[userModules.size()]);
 
-        config = new RingoConfiguration(home, userModulePath, systemModulePath);
+        config = new RingoConfig(home, userModulePath, systemModulePath);
         boolean hasPolicy = System.getProperty("java.security.policy") != null;
         config.setPolicyEnabled(hasPolicy);
         config.setWrapFactory(hasPolicy ? new SecureWrapFactory() : new RingoWrapFactory());
@@ -351,12 +351,13 @@ public class RingoRunner {
         } else if ("history".equals(option)) {
             history = new File(arg);
         } else if ("modules".equals(option)) {
-            userModules.add(arg);
+            Collections.addAll(userModules,
+                    StringUtils.split(arg, File.pathSeparator));
         } else if ("policy".equals(option)) {
             System.setProperty("java.security.policy", arg);
             System.setSecurityManager(new RingoSecurityManager());
         } else if ("java-property".equals(option)) {
-            if (arg.indexOf("=") > -1) {
+            if (arg.contains("=")) {
                 String property[] = arg.split("=", 2);
                 System.setProperty(property[0], property[1]);
             }

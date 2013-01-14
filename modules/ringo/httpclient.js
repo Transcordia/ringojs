@@ -1,450 +1,39 @@
-/**
- * @fileOverview A scalable HTTP client that provides both synchronous and
- * asynchronous modes of operation.
- */
-
-importPackage(org.eclipse.jetty.client);
-
-var objects = require('ringo/utils/objects');
-var {ByteString, Binary} = require('binary');
-var {Stream, TextStream} = require('io');
-var {Buffer} = require('ringo/buffer');
-var {Decoder} = require('ringo/encoding');
+var {URL, URLConnection, HttpCookie} = java.net;
+var {InputStream, BufferedOutputStream, OutputStreamWriter, BufferedWriter,
+        ByteArrayOutputStream, PrintWriter, OutputStreamWriter} = java.io;
+var {GZIPInputStream, InflaterInputStream} = java.util.zip;
+var {TextStream, MemoryStream} = require("io");
 var {getMimeParameter, Headers, urlEncode} = require('ringo/utils/http');
-var base64 = require('ringo/base64');
-var {Deferred} = require('ringo/promise');
-var log = require('ringo/logging').getLogger(module.id);
+var {ByteArray} = require("binary");
+var objects = require("ringo/utils/objects");
+var base64 = require("ringo/base64");
+var {Buffer} = require("ringo/buffer");
+var {Random} = java.util;
 
-export('request', 'post', 'get', 'del', 'put');
+export("request", "get", "post", "put", "del", "TextPart", "BinaryPart");
 
-/**
- * Wrapper around jetty.http.HttpCookie.
- */
-var Cookie = function(cookieStr) {
-
-    Object.defineProperties(this, {
-        /**
-         * @returns {String} the cookie's name
-         */
-        name: {
-            get: function() {
-                return cookie.getName();
-            }
-        },
-        /**
-         * @returns {String} the cookie value
-         */
-        value: {
-            get: function() {
-                return cookie.getValue();
-            }
-        },
-        /**
-         * @returns {String} the cookie domain
-         */
-        domain: {
-            get: function() {
-                return cookie.getDomain();
-            }
-        },
-        /**
-         * @returns {String} the cookie path
-         */
-        path: {
-            get: function() {
-                return cookie.getPath();
-            }
-        }
-    });
-
-    /**
-     * Parses the cookie string passed as argument
-     * @param {String} cookieStr The cookie string as received from the remote server
-     * @returns {Object} An object containing all key/value pairs of the cookiestr
-     */
-    var parse = function(cookieStr) {
-        if (cookieStr != null) {
-            var cookie = {};
-            var m = Cookie.PATTERN.exec(cookieStr);
-            if (m) {
-                cookie.name = m[1].trim();
-                cookie.value = m[2] ? m[2].trim() : "";
-            }
-            while ((m = Cookie.PATTERN.exec(cookieStr)) != null) {
-                var key = m[1].trim();
-                var value = m[2] ? m[2].trim() : "";
-                cookie[key.toLowerCase()] = value;
-            }
-            return cookie;
-        }
-        return null;
-    };
-
-    var cookieData = parse(cookieStr);
-    // FIXME FUTURE httpclient doesn't care about maxage or httponly (yet) so we don't either
-    var cookie = null;
-    if (cookieData.name && cookieData.value) {
-        if (cookieData.domain) {
-            if (cookieData.path) {
-                cookie = new org.eclipse.jetty.http.HttpCookie(
-                    cookieData.name,
-                    cookieData.value,
-                    cookieData.domain,
-                    cookieData.path
-                );
-            } else {
-                cookie = new org.eclipse.jetty.http.HttpCookie(
-                    cookieData.name,
-                    cookieData.value,
-                    cookieData.domain
-                );
-            }
-        } else {
-            cookie = new org.eclipse.jetty.http.HttpCookie(cookieData.name, cookieData.value);
-        }
-    }
-
-    return this;
-};
-
-/**
- * An instance of java.text.SimpleDateFormat used for both parsing
- * an "expires" string into a date and vice versa
- * @type java.text.SimpleDateFormat
- * @final
- */
-Cookie.DATEFORMAT = new java.text.SimpleDateFormat("EEE, dd-MMM-yy HH:mm:ss z");
-
-/**
- * A regular expression used for parsing cookie strings
- * @type RegExp
- * @final
- */
-Cookie.PATTERN = /([^=;]+)=?([^;]*)(?:;\s*|$)/g;
-
-
-/**
- * An Exchange encapsulates the Request and Response of an HTTP Exchange.
- * @constructor
- * @name Exchange
- */
-var Exchange = function(url, options, callbacks) {
-    if (!url) throw new Error('missing url argument');
-
-    this.toString = function() {
-        return "[ringo.httpclient.Exchange] " + url;
-    };
-
-    Object.defineProperties(this, {
-        /**
-         * The response status code
-         * @name Exchange.prototype.status
-         */
-        status: {
-            get: function() {
-                return exchange.getResponseStatus();
-            }, enumerable: true
-        },
-        /**
-         * The response content type
-         * @name Exchange.prototype.contentType
-         */
-        contentType: {
-            get: function() {
-                return responseHeaders.get('Content-Type');
-            }, enumerable: true
-        },
-        /**
-         * The response body as String
-         * @name Exchange.prototype.content
-         */
-        content: {
-            get: function() {
-                return exchange.getResponseContent();
-            }, enumerable: true
-        },
-        /**
-         * The response body as ByteString
-         * @name Exchange.prototype.contentBytes
-         */
-        contentBytes: {
-            get: function() {
-                var bytes = exchange.getResponseContentBytes();
-                return bytes ? ByteString.wrap(bytes) : new ByteString();
-            }, enumerable: true
-        },
-        /**
-         * @name Exchange.prototype.contentChunk
-         */
-        contentChunk: {
-            get: function() {
-                return exchange.getRequestContentChunk();
-            }, enumerable: true
-        },
-        /**
-         * The Jetty ContentExchange object
-         * @see http://download.eclipse.org/jetty/7.0.2.v20100331/apidocs/org/eclipse/jetty/client/ContentExchange.html
-         * @name Exchange.prototype.contentExchange
-         */
-        contentExchange: {
-            get: function() {
-                return exchange;
-            }, enumerable: true
-        },
-        /**
-         * The response headers
-         * @name Exchange.prototype.headers
-         */
-        headers: {
-            get: function() {
-                return responseHeaders;
-            }, enumerable: true
-        },
-        /**
-         * The cookies set by the server
-         * @name Exchange.prototype.cookies
-         */
-        cookies: {
-            get: function() {
-                var cookies = {};
-                var cookieHeaders = responseHeaders.get("Set-Cookie");
-                cookieHeaders = cookieHeaders ? cookieHeaders.split("\n") : [];
-                for each (var header in cookieHeaders) {
-                    var cookie = new Cookie(header);
-                    cookies[cookie.name] = cookie;
-                }
-                return cookies;
-            }, enumerable: true
-        },
-        /**
-         * The response encoding
-         * @name Exchange.prototype.encoding
-         */
-        encoding: {
-            // NOTE HttpExchange._encoding knows about this but is protected
-            get: function() {
-                return getMimeParameter(this.contentType, "charset") || 'utf-8';
-            }, enumerable: true
-        },
-        /**
-         * True if the request has completed, false otherwise
-         * @name Exchange.prototype.done
-         */
-        done: {
-            get: function() {
-                return exchange.isDone();
-            }, enumerable: true
-        },
-        /**
-         * Waits for the request to complete and returns the Exchange object itself.
-         * This method returns immediately if the request has already completed.
-         * Otherwise, it will block the current thread until completion.
-         * @returns the Exchange object
-         * @name Exchange.prototype.wait
-         */
-        wait: {
-            value: function() {
-                exchange.waitForDone();
-                return this;
-            }, enumerable: true
-        }
-    });
-
-    var getStatusMessage = function(status) {
-        var message;
-        try {
-            var code = org.eclipse.jetty.http.HttpStatus.getCode(status);
-            message = code && code.getMessage();
-        } catch (error) {
-             // ignore
-        }
-        return message || "Unknown status code (" + status + ")";
-    };
-
-    /**
-    * Constructor
-    */
-
-    var self = this;
-    var responseHeaders = new Headers();
-    var decoder;
-    var exchange = new JavaAdapter(ContentExchange, {
-        onResponseComplete: function() {
-            try {
-                this.super$onResponseComplete();
-                var content = options.binary ? self.contentBytes : self.content;
-                if (typeof(callbacks.complete) === 'function') {
-                    callbacks.complete(content, self.status, self.contentType, self);
-                }
-                // This callback will only see a redirect status if the max number
-                // of redirects handled by the RedirectListener are reached or
-                // the client was instantianted with followRedirects = false.
-                if (self.status >= 200 && self.status < 400) {
-                    if (typeof(callbacks.success) === 'function') {
-                        callbacks.success(content, self.status, self.contentType, self);
-                    }
-                } else if (typeof(callbacks.error) === 'function') {
-                    var message = getStatusMessage(self.status);
-                    callbacks.error(message, self.status, self);
-                }
-            } finally {
-                if (options.async) {
-                    global.exitAsyncTask();
-                }
-            }
-            return;
-        },
-        onResponseContent: function(content) {
-            if (typeof(callbacks.part) === 'function') {
-                if (options.binary) {
-                    var bytes = ByteString.wrap(content.asArray());
-                    callbacks.part(bytes, self.status, self.contentType, self);
-                } else {
-                    decoder = decoder || new Decoder(self.encoding);
-                    bytes = content.array();
-                    if (bytes == null) {
-                        decoder.decode(content.asArray(), 0, content.length());
-                    } else {
-                        decoder.decode(bytes, content.getIndex(), content.putIndex());
-                    }
-                    callbacks.part(decoder.toString(), self.status, self.contentType, self);
-                    decoder.clear();
-                }
-            } else {
-                this.super$onResponseContent(content);
-            }
-            return;
-        },
-        onResponseHeader: function(key, value) {
-            this.super$onResponseHeader(key, value);
-            responseHeaders.add(String(key), String(value));
-            return;
-        },
-        onConnectionFailed: function(exception) {
-            try {
-                this.super$onConnectionFailed(exception);
-                if (typeof(callbacks.error) === 'function') {
-                    var message = exception.getMessage() || exception.toString();
-                    callbacks.error(message, 0, self);
-                }
-            } finally {
-                if (options.async) {
-                    global.exitAsyncTask();
-                }
-            }
-            return;
-        },
-        onException: function(exception) {
-            try {
-                this.super$onException(exception);
-                if (typeof(callbacks.error) === 'function') {
-                    var message = exception.getMessage() || exception.toString();
-                    callbacks.error(message, 0, self);
-                }
-            } finally {
-                if (options.async) {
-                    global.exitAsyncTask();
-                }
-            }
-            return;
-        },
-        onExpire: function() {
-            try {
-                this.super$onExpire();
-                if (typeof(callbacks.error) === 'function') {
-                    callbacks.error('Request expired', 0, self);
-                }
-            } finally {
-                if (options.async) {
-                    global.exitAsyncTask();
-                }
-            }
-            return;
-        },
-    });
-
-    exchange.setMethod(options.method);
-
-    // deal with username:password in url
-    var urlObj = new java.net.URL(url);
-    var userInfo = urlObj.getUserInfo();
-    if (userInfo) {
-        // exchange.setURL does not take username:password in URL
-        url = url.replace(userInfo + "@", "");
-        var [username, password] = userInfo.split(":");
-        options.username = options.username || username;
-        options.password = options.password || password;
-    }
-
-    if (typeof(options.username) === 'string' && typeof(options.password) === 'string') {
-        var authKey = base64.encode(options.username + ':' + options.password);
-        var authHeaderValue = "Basic " + authKey;
-        exchange.addRequestHeader("Authorization", authHeaderValue);
-    }
-
-    for (var headerKey in options.headers) {
-        exchange.addRequestHeader(headerKey, options.headers[headerKey]);
-    }
-
-    // set content
-    var content = options.data;
-
-    if (options.method === 'POST' || options.method === 'PUT') {
-        var {ByteArrayBuffer} = org.eclipse.jetty.io;
-        if (content instanceof Binary) {
-            exchange.setRequestContent(new ByteArrayBuffer(content));
-        } else {
-            if (content instanceof Stream || content instanceof java.io.InputStream) {
-                exchange.setRequestContentSource(content);
-            } else {
-                if (content instanceof TextStream) {
-                    // FIXME this relies on TextStream not being instanceof Stream
-                    content = content.read();
-                } else if (content instanceof Object) {
-                    content = urlEncode(content);
-                }
-                if (typeof(content) === 'string') {
-                    var charset = getMimeParameter(options.contentType, 'charset') || 'utf-8';
-                    exchange.setRequestContent(new ByteArrayBuffer(content, charset));
-                }
-            }
-        }
-        exchange.setRequestContentType(options.contentType);
-    } else {
-        if (content instanceof Object) {
-            content = urlEncode(content);
-        }
-        if (typeof(content) === 'string' && content.length) {
-            url += "?" + content;
-        }
-    }
-    exchange.setURL(url);
-    // FIXME we could add a RedirectListener right here to auto-handle redirects
-
-    return this;
-};
+const VERSION = "0.1";
+const CRLF = "\r\n";
+const BOUNDARY_CHARS = "-_1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 /**
  * Defaults for options passable to to request()
  */
-var defaultOptions = function(options) {
+var prepareOptions = function(options) {
     var defaultValues = {
-        // exchange
-        data: {},
-        headers: {},
-        method: 'GET',
-        username: undefined,
-        password: undefined,
-        // client
-        async: false,
-        cache: true,
-        binary: false
+        "data": {},
+        "headers": {},
+        "method": "GET",
+        "username": undefined,
+        "password": undefined,
+        "followRedirects": true,
+        "binary": false
     };
     var opts = options ? objects.merge(options, defaultValues) : defaultValues;
     Headers(opts.headers);
     opts.contentType = opts.contentType
-            || opts.headers.get('Content-Type')
-            || 'application/x-www-form-urlencoded;charset=utf-8';
+            || opts.headers.get("Content-Type")
+            || "application/x-www-form-urlencoded;charset=utf-8";
     return opts;
 };
 
@@ -505,143 +94,397 @@ var extractOptionalArguments = function(args) {
 };
 
 /**
- * A HttpClient which can be used for multiple requests.
- *
- * Use this Client instead of the convenience methods if you do lots
- * of requests (especially if they go to the same hosts)
- * or if you want cookies to be preserved between multiple requests.
-
- * @param {Number} timeout The connection timeout
- * @param {Boolean} followRedirects If true then redirects (301, 302) are followed
+ * A wrapper around java.net.HttpCookie
+ * @param {java.net.HttpCookie} httpCookie The HttpCookie instance to wrap
+ * @returns {Cookie} A newly created Cookie instance
  * @constructor
  */
-var Client = function(timeout, followRedirects) {
+var Cookie = function(httpCookie) {
 
-    this.get = function(url, data, success, error) {
-        if (arguments.length < 4) {
-            var {url, data, success, error} = extractOptionalArguments(arguments);
-        }
-        return this.request({
-            method: 'GET',
-            url: url,
-            data: data,
-            success: success,
-            error: error,
-            async: typeof success === 'function'
-        });
-    };
-
-    this.post = function(url, data, success, error) {
-        if (arguments.length < 4) {
-            var {url, data, success, error} = extractOptionalArguments(arguments);
-        }
-        return this.request({
-            method: 'POST',
-            url: url,
-            data: data,
-            success: success,
-            error: error,
-            async: typeof success === 'function'
-        });
-    };
-
-    this.del = function(url, data, success, error) {
-        if (arguments.length < 4) {
-            var {url, data, success, error} = extractOptionalArguments(arguments);
-        }
-        return this.request({
-            method: 'DELETE',
-            url: url,
-            data: data,
-            success: success,
-            error: error,
-            async: typeof success === 'function'
-        });
-    };
-
-    this.put = function(url, data, success, error) {
-        if (arguments.length < 4) {
-            var {url, data, success, error} = extractOptionalArguments(arguments);
-        }
-        return this.request({
-            method: 'PUT',
-            url: url,
-            data: data,
-            success: success,
-            error: error,
-            async: typeof success === 'function'
-        });
-    };
-
-    this.request = function(options) {
-        var opts = defaultOptions(options);
-        if (opts.promise) {
-            var deferred = new Deferred();
-            opts.success = function() {deferred.resolve(arguments[3])};
-            opts.error = function() {deferred.resolve(arguments[2], true)};
-            opts.async = true;
-        }
-        var exchange = new Exchange(opts.url, {
-            method: opts.method,
-            data: opts.data,
-            headers: opts.headers,
-            username: opts.username,
-            password: opts.password,
-            contentType: opts.contentType,
-            binary: opts.binary,
-            async: opts.async
-        }, {
-            success: opts.success,
-            complete: opts.complete,
-            error: opts.error,
-            part: opts.part
-        });
-        if (typeof(opts.beforeSend) === 'function') {
-            opts.beforeSend(exchange);
-        }
-        try {
-            client.send(exchange.contentExchange);
-            if (opts.async) {
-                global.enterAsyncTask();
-            } else {
-                exchange.contentExchange.waitForDone();
+    Object.defineProperties(this, {
+        /**
+         * @returns {String} the cookie's name
+         */
+        "name": {
+            "get": function() {
+                return httpCookie.getName();
             }
-        } catch (e) { // probably java.net.ConnectException
-            if (typeof(opts.error) === 'function') {
-                opts.error(e, 0, exchange);
+        },
+        /**
+         * @returns {String} the cookie value
+         */
+        "value": {
+            "get": function() {
+                return httpCookie.getValue();
+            }
+        },
+        /**
+         * @returns {String} the cookie domain
+         */
+        "domain": {
+            "get": function() {
+                return httpCookie.getDomain();
+            }
+        },
+        /**
+         * @returns {String} the cookie path
+         */
+        "path": {
+            "get": function() {
+                return httpCookie.getPath();
+            }
+        },
+
+        /**
+         * @returns {Number} the max age of this cookie in seconds
+         */
+        "maxAge": {
+            "get": function() {
+                return httpCookie.getMaxAge();
+            }
+        },
+
+        /**
+         * @returns {String} true if this cookie is restricted to a secure protocol
+         */
+        "isSecure": {
+            "get": function() {
+                return httpCookie.getSecure();
+            }
+        },
+
+        /**
+         * @returns {String} the cookie version
+         */
+        "version": {
+            "get": function() {
+                return httpCookie.getVersion();
             }
         }
-        return opts.promise ? deferred.promise : exchange;
-    };
+    });
 
-    var client = new HttpClient();
-    if (typeof timeout == "number") {
-        if (timeout <= 0) {
-            // Disable timeout if zero or negative
-            timeout = java.lang.Long.MAX_VALUE;
-        }
-        client.setTimeout(timeout);
-    }
-
-    if (followRedirects !== false) {
-        client.registerListener('org.eclipse.jetty.client.RedirectListener');
-    }
-    // client.setMaxRedirects(20); // jetty default = 20
-    // client.setIdleTimeout(10000);
-    // TODO proxy stuff
-    //client.setProxy(Adress);
-    //client.setProxyAuthentication(ProxyAuthorization);
-    client.start();
     return this;
 };
 
-// avoid reinstantiating default client if module is reevaluated.
-var defaultClient;
+/**
+ * Writes the data to the connection's output stream
+ * @param {Object} data The data
+ * @param {java.net.HttpURLConnection} connection The connection
+ * @param {String} charset The character set name
+ * @param {String} contentType The content type
+ */
+var writeData = function(data, connection, charset, contentType) {
+    connection.setRequestProperty("Content-Type", contentType);
+    var outStream;
+    try {
+        outStream = new Stream(connection.getOutputStream());
+        if (data instanceof InputStream) {
+            (new Stream(data)).copy(outStream).close();
+        } else if (data instanceof Binary) {
+            (new MemoryStream(data)).copy(outStream).close();
+        } else if (data instanceof Stream) {
+            data.copy(outStream).close();
+        } else {
+            if (data instanceof TextStream) {
+                data = data.read();
+            } else if (data instanceof Object) {
+                data = urlEncode(data);
+            }
+            if (typeof(data) === "string" && data.length > 0) {
+                var writer = new BufferedWriter(OutputStreamWriter(outStream, charset));
+                writer.write(data);
+                writer.close();
+            }
+        }
+    } finally {
+        outStream && outStream.close();
+    }
+};
 
-function getClient() {
-    defaultClient = defaultClient || new Client();
-    return defaultClient;
-}
+/**
+ * Generates a multipart boundary
+ * @returns {String} A multipart boundary
+ */
+var generateBoundary = function() {
+    // taken from apache httpclient
+    var buffer = new Buffer();
+    var random = new Random();
+    var count = random.nextInt(11) + 30; // a random size from 30 to 40
+    for (let i=0; i<count; i++) {
+        buffer.write(BOUNDARY_CHARS[random.nextInt(BOUNDARY_CHARS.length)]);
+    }
+    return buffer.toString();
+};
+
+/**
+ * Writes the multipart data to the connection's output stream
+ * @param {Object} data An object containing the multipart data
+ * @param {java.net.HttpURLConnection} connection The connection to write the data to
+ * @param {String} charset The charset
+ * @param {String} boundary The multipart boundary
+ */
+var writeMultipartData = function(data, connection, charset, boundary) {
+    connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+    var outStream, writer;
+    try {
+        outStream = new Stream(connection.getOutputStream());
+        writer = new PrintWriter(new OutputStreamWriter(outStream, charset), true);
+        for (let [name, part] in Iterator(data)) {
+            writer.append("--" + boundary).append(CRLF);
+            part.write(name, writer, outStream);
+        }
+        writer.append("--").append(boundary).append("--").append(CRLF);
+    } finally {
+        writer && writer.close();
+        outStream && outStream.close();
+    }
+};
+
+/**
+ * Reads the response and returns it as ByteArray
+ * @param {java.net.HttpURLConnection} connection The connection
+ * @returns {ByteArray} The response as ByteArray
+ */
+var readResponse = function(connection) {
+    var status = connection.getResponseCode();
+    var inStream;
+    try {
+        inStream = connection[(status >= 200 && status < 400) ?
+                "getInputStream" : "getErrorStream"]();
+        var encoding = connection.getContentEncoding();
+        if (encoding != null) {
+            if (encoding === "gzip") {
+                inStream = new GZIPInputStream(inStream);
+            } else if (encoding === "deflate") {
+                inStream = new InflaterInputStream(inStream);
+            }
+        }
+        inStream = new Stream(inStream);
+        var outStream = new ByteArrayOutputStream(8192);
+        inStream.copy(outStream);
+        return new ByteArray(outStream.toByteArray());
+    } finally {
+        inStream && inStream.close();
+    }
+};
+
+/**
+ * @name Exchange
+ * @param {String} url The URL
+ * @param {Object} options The options
+ * @param {Object} callbacks An object containing success, error and complete
+ * callback methods
+ * @returns {Exchange} A newly constructed Exchange instance
+ * @constructor
+ */
+var Exchange = function(url, options, callbacks) {
+    var reqData = options.data;
+    var connection = null;
+    var responseContent;
+    var responseContentBytes;
+    var isDone = false;
+
+    Object.defineProperties(this, {
+        /**
+         * The connection used by this Exchange instance
+         * @name Exchange.prototype.connection
+         */
+        "connection": {
+            "get": function() {
+                return connection;
+            }, "enumerable": true
+        },
+        /**
+         * True if the request has completed, false otherwise
+         * @name Exchange.prototype.done
+         */
+        "done": {
+            "get": function() {
+                return isDone;
+            }, enumerable: true
+        },
+        /**
+         * The response body as String
+         * @name Exchange.prototype.content
+         */
+        "content": {
+            "get": function() {
+                if (responseContent !== undefined) {
+                    return responseContent;
+                }
+                return responseContent = this.contentBytes.decodeToString(this.encoding);
+            }, "enumerable": true
+        },
+        /**
+         * The response body as ByteArray
+         * @name Exchange.prototype.contentBytes
+         */
+        "contentBytes": {
+            "get": function() {
+                return responseContentBytes;
+            }, "enumerable": true
+        }
+    });
+
+    try {
+        if (options.method !== "POST" && options.method !== "PUT") {
+            reqData = urlEncode(reqData);
+            if (typeof(reqData) === "string" && reqData.length > 0) {
+                url += "?" + reqData;
+            }
+        }
+        connection = (new URL(url)).openConnection();
+        connection.setAllowUserInteraction(false);
+        connection.setFollowRedirects(options.followRedirects);
+        connection.setRequestMethod(options.method);
+        connection.setRequestProperty("User-Agent", "RingoJS HttpClient " + VERSION);
+        connection.setRequestProperty("Accept-Encoding", "gzip,deflate");
+
+        // deal with username:password in url
+        var userInfo = connection.getURL().getUserInfo();
+        if (userInfo) {
+            var [username, password] = userInfo.split(":");
+            options.username = options.username || username;
+            options.password = options.password || password;
+        }
+        // set authentication header
+        if (typeof(options.username) === "string" && typeof(options.password) === "string") {
+            var authKey = base64.encode(options.username + ':' + options.password);
+            connection.setRequestProperty("Authorization", "Basic " + authKey);
+        }
+        // set header keys specified in options
+        for (let key in options.headers) {
+            connection.setRequestProperty(key, options.headers[key]);
+        }
+        if (typeof(callbacks.beforeSend) === "function") {
+            callbacks.beforeSend(this);
+        }
+
+        if (options.method === "POST" || options.method === "PUT") {
+            connection.setDoOutput(true);
+            var charset = getMimeParameter(options.contentType, "charset") || "utf-8";
+            if (options.method === "POST" && options.contentType === "multipart/form-data") {
+                writeMultipartData(reqData, connection, charset, generateBoundary());
+            } else {
+                writeData(reqData, connection, charset, options.contentType);
+            }
+        }
+        responseContentBytes = readResponse(connection);
+        if (this.status > 300) {
+            throw new Error(this.status);
+        }
+        if (typeof(callbacks.success) === "function") {
+            var content = (options.binary === true) ? this.contentBytes : this.content;
+            callbacks.success(content, this.status, this.contentType, this);
+        }
+    } catch (e) {
+        if (typeof(callbacks.error) === "function") {
+            callbacks.error(this.message, this.status, this);
+        }
+    } finally {
+        isDone = true;
+        try {
+            if (typeof(callbacks.complete) === "function") {
+                var content = (options.binary === true) ? this.contentBytes : this.content;
+                callbacks.complete(content, this.status, this.contentType, this);
+            }
+        } finally {
+            connection && connection.disconnect();
+        }
+    }
+
+    return this;
+};
+
+Object.defineProperties(Exchange.prototype, {
+    /**
+     * The URL wrapped by this Exchange instance
+     * @type java.net.URL
+     * @name Exchange.prototype.url
+     */
+    "url": {
+        "get": function() {
+            return this.connection.getURL();
+        }, "enumerable": true
+    },
+    /**
+     * The response status code
+     * @type Number
+     * @name Exchange.prototype.status
+     */
+    "status": {
+        "get": function() {
+            return this.connection.getResponseCode();
+        }, "enumerable": true
+    },
+    /**
+     * The response status message
+     * @type String
+     * @name Exchange.prototype.message
+     */
+    "message": {
+        "get": function() {
+            return this.connection.getResponseMessage();
+        }, "enumerable": true
+    },
+    /**
+     * The response headers
+     * @name Exchange.prototype.headers
+     */
+    "headers": {
+        "get": function() {
+            return new ScriptableMap(this.connection.getHeaderFields());
+        }, enumerable: true
+    },
+    /**
+     * The cookies set by the server
+     * @name Exchange.prototype.cookies
+     */
+    "cookies": {
+        "get": function() {
+            var cookies = {};
+            var cookieHeaders = this.connection.getHeaderField("Set-Cookie");
+            if (cookieHeaders !== null) {
+                var list = new ScriptableList(HttpCookie.parse(cookieHeaders));
+                for each (let httpCookie in list) {
+                    let cookie = new Cookie(httpCookie);
+                    cookies[cookie.name] = cookie;
+                }
+            }
+            return cookies;
+        }, enumerable: true
+    },
+    /**
+     * The response encoding
+     * @type String
+     * @name Exchange.prototype.encoding
+     */
+    "encoding": {
+        "get": function() {
+            return getMimeParameter(this.contentType, "charset") || "utf-8";
+        }, "enumerable": true
+    },
+    /**
+     * The response content type
+     * @type String
+     * @name Exchange.prototype.contentType
+     */
+    "contentType": {
+        "get": function() {
+            return this.connection.getContentType();
+        }, "enumerable": true
+    },
+    /**
+     * The response content length
+     * @type Number
+     * @name Exchange.prototype.contentLength
+     */
+    "contentLength": {
+        "get": function() {
+            return this.connection.getContentLength();
+        }, "enumerable": true
+    }
+});
 
 /**
  * Make a generic request.
@@ -658,12 +501,10 @@ function getClient() {
  *  - `username`: username for HTTP authentication
  *  - `password`: password for HTTP authentication
  *  - `contentType`: the contentType
- *  - `async`: if true this method will return immedialtely , else it will block
- *     until the request is completed
  *  - `binary`: if true if content should be delivered as binary,
  *     else it will be decoded to string
- *  - `promise`: if true a promise that resolves to the request's Exchange
- *     object is returned instead of the Exchange object itself
+ *  - `followRedirects`: whether HTTP redirects (response code 3xx) should be
+ *     automatically followed; default: true
  *
  *  #### Callbacks
  *
@@ -672,7 +513,6 @@ function getClient() {
  *  - `complete`: called when the request is completed
  *  - `success`: called when the request is completed successfully
  *  - `error`: called when the request is completed with an error
- *  - `part`: called when a part of the response is available
  *  - `beforeSend`: called with the Exchange object as argument before the request is sent
  *
  *  The following arguments are passed to the `complete`, `success` and `part` callbacks:
@@ -694,71 +534,179 @@ function getClient() {
  * @see #put
  * @see #del
  */
-var request = function() {
-    var client = getClient();
-    return client.request.apply(client, arguments);
+var request = function(options) {
+    var opts = prepareOptions(options);
+    return new Exchange(opts.url, {
+        "method": opts.method,
+        "data": opts.data,
+        "headers": opts.headers,
+        "username": opts.username,
+        "password": opts.password,
+        "contentType": opts.contentType,
+        "followRedirects": opts.followRedirects,
+        "binary": opts.binary
+    }, {
+        "beforeSend": opts.beforeSend,
+        "success": opts.success,
+        "complete": opts.complete,
+        "error": opts.error
+    });
 };
 
 /**
- * Make a POST request. If a success callback is provided, the request is executed
- * asynchronously and the function returns immediately. Otherwise, the function
- * blocks until the request terminates.
- * @param {String} url the url to request
- * @param {Object|String|Binary|Stream} data request data, optional
- * @param {Function} success callback in case of successful status code, optional
- * @param {Function} error callback in case of any error - transmission or response, optional
- * @returns {Exchange} exchange object
- * @see #request
+ * Creates an options object based on the arguments passed
+ * @param {String} method The request method
+ * @param {String} url The URL
+ * @param {String|Object|Stream|Binary} data Optional data to send to the server
+ * @param {Function} success Optional success callback
+ * @param {Function} error Optional error callback
+ * @returns An options object
  */
-var post = function() {
-    var client = getClient();
-    return client.post.apply(client, arguments);
+var createOptions = function(method, url, data, success, error) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    if (args.length < 4) {
+        var {url, data, success, error} = extractOptionalArguments(args);
+    }
+    return {
+        method: method,
+        url: url,
+        data: data,
+        success: success,
+        error: error
+    };
 };
 
 /**
- * Make a GET request. If a success callback is provided, the request is executed
- * asynchronously and the function returns immediately. Otherwise, the function
- * blocks until the request terminates.
- * @param {String} url the url to request
- * @param {Object|String} data request data, optional
- * @param {Function} success callback in case of successful status code, optional
- * @param {Function} error callback in case of any error - transmission or response, optional
- * @returns {Exchange} exchange object
- * @see #request
+ * Executes a GET request
+ * @param {String} url The URL
+ * @param {Object|String} data The data to append as GET parameters to the URL
+ * @param {Function} success Optional success callback
+ * @param {Function} error Optional error callback
+ * @returns The Exchange instance representing the request and response
+ * @type Exchange
  */
-var get = function() {
-    var client = getClient();
-    return client.get.apply(client, arguments);
+var get = function(url, data, success, error) {
+    return request(createOptions("GET", url, data, success, error));
 };
 
 /**
- * Make a DELETE request. If a success callback is provided, the request is executed
- * asynchronously and the function returns immediately. Otherwise, the function
- * blocks until the request terminates.
- * @param {String} url the url to request
- * @param {Object|String} data request data, optional
- * @param {Function} success callback in case of successful status code, optional
- * @param {Function} error callback in case of any error - transmission or response, optional
- * @returns {Exchange} exchange object
- * @see #request
+ * Executes a POST request
+ * @param {String} url The URL
+ * @param {Object|String|Stream|Binary} data The data to send to the server
+ * @param {Function} success Optional success callback
+ * @param {Function} error Optional error callback
+ * @returns The Exchange instance representing the request and response
+ * @type Exchange
  */
-var del = function() {
-    var client = getClient();
-    return client.del.apply(client, arguments);
+var post = function(url, data, success, error) {
+    return request(createOptions("POST", url, data, success, error));
 };
 
 /**
- * Make a PUT request. If a success callback is provided, the request is executed
- * asynchronously and the function returns immediately. Otherwise, the function
- * blocks until the request terminates.
- * @param {String} url the url to request
- * @param {Object|String|Binary|Stream} data request data, optional
- * @param {Function} success callback in case of successful status code, optional
- * @param {Function} error callback in case of any error - transmission or response, optional
- * @returns {Exchange} exchange object
- * @see #request
+ * Executes a DELETE request
+ * @param {String} url The URL
+ * @param {Object|String} data The data to append as GET parameters to the URL
+ * @param {Function} success Optional success callback
+ * @param {Function} error Optional error callback
+ * @returns The Exchange instance representing the request and response
+ * @type Exchange
  */
-var put = function() {
-    var client = getClient();
-    return client.put.apply(client, arguments);
+var del = function(url, data, success, error) {
+    return request(createOptions("DELETE", url, data, success, error));
+};
+
+/**
+ * Executes a PUT request
+ * @param {String} url The URL
+ * @param {Object|String|Stream|Binary} data The data send to the server
+ * @param {Function} success Optional success callback
+ * @param {Function} error Optional error callback
+ * @returns The Exchange instance representing the request and response
+ * @type Exchange
+ */
+var put = function(url, data, success, error) {
+    return request(createOptions("PUT", url, data, success, error));
+};
+
+/**
+ * @name TextPart
+ * @param {String|TextStream} data The data
+ * @param {String} charset The charset
+ * @param {String} filename An optional file name
+ * @returns {TextPart} A newly constructed TextPart instance
+ * @constructor
+ */
+var TextPart = function(data, charset, filename) {
+
+    /**
+     * Writes this TextPart's data
+     * @param {String} name The name of the text part
+     * @param {java.io.PrintWriter} writer The writer
+     * @param {java.io.OutputStream} outStream The output stream
+     * @ignore
+     */
+    this.write = function(name, writer, outStream) {
+        writer.append("Content-Disposition: form-data; name=\"")
+                .append(name).append("\"");
+        if (filename != null) {
+            writer.append("; filename=\"").append(filename).append("\"");
+        }
+        writer.append(CRLF);
+        writer.append("Content-Type: text/plain; charset=")
+                .append(charset || "utf-8").append(CRLF);
+        writer.append(CRLF).flush();
+        if (data instanceof TextStream) {
+            data.copy(new TextStream(outStream, {
+                "charset": charset || "utf-8"
+            })).close();
+            outStream.flush();
+        } else {
+            writer.append(data);
+        }
+        writer.append(CRLF).flush();
+    };
+
+    return this;
+};
+
+/**
+ * @name BinaryPart
+ * @param {String} data The data
+ * @param {String} charset The charset
+ * @param {String} filename An optional file name
+ * @returns {BinaryPart} A newly constructed BinaryPart instance
+ * @constructor
+ */
+var BinaryPart = function(data, filename) {
+
+    /**
+     * Writes this BinaryPart's data
+     * @param {String} name The name of the text part
+     * @param {java.io.PrintWriter} writer The writer
+     * @param {java.io.OutputStream} outStream The output stream
+     * @ignore
+     */
+    this.write = function(name, writer, outStream) {
+        writer.append("Content-Disposition: form-data; name=\"")
+                .append(name).append("\"");
+        if (filename != null) {
+            writer.append("; filename=\"").append(filename).append("\"");
+        }
+        writer.append(CRLF);
+        writer.append("Content-Type: ")
+                .append(URLConnection.guessContentTypeFromName(filename))
+                .append(CRLF);
+        writer.append("Content-Transfer-Encoding: binary").append(CRLF);
+        writer.append(CRLF).flush();
+        if (data instanceof InputStream) {
+            (new Stream(data)).copy(outStream).close();
+        } else if (data instanceof Binary) {
+            (new MemoryStream(data)).copy(outStream).close();
+        } else if (data instanceof Stream) {
+            data.copy(outStream).close();
+        }
+        writer.append(CRLF).flush();
+    };
+
+    return this;
 };

@@ -3,7 +3,6 @@
  */
 
 var log = require('ringo/logging').getLogger(module.id);
-var Parser = require('ringo/args').Parser;
 var system = require('system');
 var {JavaEventEmitter} = require('ringo/events');
 var {WebSocket, WebSocketServlet} = org.eclipse.jetty.websocket;
@@ -12,7 +11,6 @@ export('Server', 'main', 'init', 'start', 'stop', 'destroy');
 
 var options,
     server,
-    parser,
     started = false;
 
 /**
@@ -20,8 +18,8 @@ var options,
  * either define properties to be used with the default jetty.xml, or define
  * a custom configuration file.
  *
- * @param {Object} options A javascript object with any of the following properties,
- * with the default value in parentheses:
+ * @param {Object} options A javascript object with any of the following
+ * properties (default values in parentheses):
  * <ul>
  * <li>jettyConfig ('config/jetty.xml')</li>
  * <li>port (8080)</li>
@@ -52,24 +50,26 @@ function Server(options) {
     var xmlconfig;
 
     /**
-     * Get the server's default context. The default context is the
+     * Get the server's default [context][#Context]. The default context is the
      * context that is created when the server is created.
+     * @see #Context
      * @since: 0.6
-     * @returns the default context
+     * @returns the default Context
      */
     this.getDefaultContext = function() {
         return defaultContext;
     };
 
     /**
-     * Get a servlet application context for the given path and virtual hosts, creating
-     * it if it doesn't exist.
+     * Get a servlet application [context][#Context] for the given path and
+     * virtual hosts, creating it if it doesn't exist.
      * @param {string} path the context root path such as "/" or "/app"
      * @param {string|array} virtualHosts optional single or multiple virtual host names.
      *   A virtual host may start with a "*." wildcard.
      * @param {Object} options may have the following properties:
      *   sessions: true to enable sessions for this context, false otherwise
      *   security: true to enable security for this context, false otherwise
+     * @see #Context
      * @since: 0.6
      * @returns a Context object
      */
@@ -92,6 +92,13 @@ function Server(options) {
             }
         }
 
+        /**
+         * Not exported as constructor by this module.
+         * @see #Server.prototype.getContext
+         * @see #Server.prototype.getDefaultContext
+         * @class Context
+         * @name Context
+         */
         return {
             /**
              * Map this context to a JSGI application.
@@ -216,7 +223,8 @@ function Server(options) {
                         };
 
                         // make socket a java event-emitter (mixin)
-                        JavaEventEmitter.call(socket, WebSocket.OnTextMessage);
+                        JavaEventEmitter.call(socket, [WebSocket.OnTextMessage,
+                                                       WebSocket.OnBinaryMessage]);
 
                         socket.addListener("open", function(connection) {
                             conn = connection;
@@ -262,7 +270,7 @@ function Server(options) {
      * @returns true if the server is running, false otherwise.
      */
     this.isRunning = function() {
-        return jetty != null && jetty.isRunning();
+        return jetty && jetty.isRunning();
     };
 
     /**
@@ -322,9 +330,12 @@ function Server(options) {
 }
 
 
-function parseOptions(arguments, defaults) {
-    // parse command line options
-    parser = new Parser();
+function parseOptions(args, defaults) {
+    // remove command from command line arguments
+    var cmd = args.shift();
+    var Parser = require('ringo/args').Parser;
+    var parser = new Parser();
+
     parser.addOption("a", "app-name", "APP", "The exported property name of the JSGI app (default: 'app')");
     parser.addOption("j", "jetty-config", "PATH", "The jetty xml configuration file (default. 'config/jetty.xml')");
     parser.addOption("H", "host", "ADDRESS", "The IP address to bind to (default: 0.0.0.0)");
@@ -334,40 +345,15 @@ function parseOptions(arguments, defaults) {
     parser.addOption("S", "static-mountpoint", "PATH", "The URI path where ot mount the static resources");
     parser.addOption("v", "virtual-host", "VHOST", "The virtual host name (default: undefined)");
     parser.addOption("h", "help", null, "Print help message to stdout");
-    options = parser.parse(arguments, defaults);
+
+    var options = parser.parse(args, defaults);
+
     if (options.port && !isFinite(options.port)) {
         var port = parseInt(options.port, 10);
         if (isNaN(port) || port < 1) {
             throw "Invalid value for port: " + options.port;
         }
         options.port = port;
-    }
-    return options;
-}
-
-/**
- * Daemon life cycle function invoked by init script. Creates a new Server with
- * the application at `path`. If the application exports a function called
- * `init`, it will be invoked with the new server as argument.
- *
- * @param path {string} optional path to the application. If undefined,
- *     the path will be taken from `system.args`.
- * @returns {Server} the Server instance.
- */
-function init(path) {
-    // protect against module reloading
-    if (started) {
-        return server;
-    }
-    // parse command line options
-    var cmd = system.args.shift();
-    try {
-        options = parseOptions(system.args, {
-            appName: "app"
-        });
-    } catch (error) {
-        print(error);
-        system.exit(1);
     }
 
     if (options.help) {
@@ -378,38 +364,66 @@ function init(path) {
         system.exit(0);
     }
 
-    var appDir = "";
-    // if no explicit path is given use first command line argument
-    path = path || system.args[0];
+    return options;
+}
+
+/**
+ * Daemon life cycle function invoked by init script. Creates a new Server with
+ * the application at `appPath`. If the application exports a function called
+ * `init`, it will be invoked with the new server as argument.
+ *
+ * @param appPath {string} optional application file name or module id.
+ *     If undefined, the first command line argument will be used as application.
+ *     If there are no command line arguments, module `main` in the current
+ *     working directory is used.
+ * @returns {Server} the Server instance.
+ */
+function init(appPath) {
+    // protect against module reloading
+    if (started) {
+        return server;
+    }
+    // parse command line options
+    try {
+        options = parseOptions(system.args, {
+            appName: "app"
+        });
+    } catch (error) {
+        log.error("Error parsing options:", error);
+        system.exit(1);
+    }
+
+    var appDir;
     var fs = require("fs");
-    if (path) {
-        try {
-            // check if argument can be resolved as module id
-            require(path);
-            options.appModule = path;
-        } catch (error) {
-            path = fs.absolute(path);
-            if (fs.isDirectory(path)) {
-                // if argument is a directory assume app in main.js
-                options.appModule = fs.join(path, "main");
-                appDir = path;
-            } else {
-                // if argument is a file use it as config module
-                options.appModule = path;
-                appDir = fs.directory(path);
-            }
+    if (appPath) {
+        // use argument as app module
+        options.appModule = appPath;
+        appDir = fs.directory(appPath);
+    } else if (system.args[0]) {
+        // take app module from command line
+        appPath = fs.resolve(fs.workingDirectory(), system.args[0]);
+        if (fs.isDirectory(appPath)) {
+            // if argument is a directory assume app in main.js
+            appDir = appPath;
+            options.appModule = fs.join(appDir, "main");
+        } else {
+            // if argument is a file use it as config module
+            options.appModule = appPath;
+            appDir = fs.directory(appPath);
         }
     } else {
+        // look for `main` module in current working directory as app module
         appDir = fs.workingDirectory();
         options.appModule = fs.join(appDir, "main");
     }
 
-    // logging module is already loaded and configured, check if webapp provides
+    // logging module is already loaded and configured, check if app provides
     // its own log4j configuration file and apply it if so.
     var logConfig = getResource(fs.join(appDir, "config/log4j.properties"));
     if (logConfig.exists()) {
         require("./logging").setConfig(logConfig);
     }
+    log.info("Set app module:", options.appModule);
 
     server = new Server(options);
     var app = require(options.appModule);
@@ -427,6 +441,9 @@ function init(path) {
  * @returns {Server} the Server instance.
  */
 function start() {
+    if (started) {
+        return server;
+    }
     server.start();
     started = true;
     var app = require(options.appModule);
@@ -446,6 +463,9 @@ function start() {
  * @returns {Server} the Server instance.
  */
 function stop() {
+    if (!started) {
+        return server;
+    }
     var app = require(options.appModule);
     if (typeof app.stop === "function") {
         app.stop(server);
@@ -463,11 +483,13 @@ function stop() {
  * @returns {Server} the Server instance.
  */
 function destroy() {
-    var app = require(options.appModule);
-    if (typeof app.destroy === "function") {
-        app.destroy(server);
+    if (server) {
+        var app = require(options.appModule);
+        if (typeof app.destroy === "function") {
+            app.destroy(server);
+        }
+        server.destroy();
     }
-    server.destroy();
     try {
         return server;
     } finally {
@@ -476,13 +498,17 @@ function destroy() {
 }
 
 /**
- * Main webapp startup function.
- * @param {String} path optional path to the web application directory or config module.
+ * Main function to start an HTTP server from the command line.
+ * @param {String} appPath optional application file name or module id.
  * @returns {Server} the Server instance.
  */
-function main(path) {
-    init(path);
+function main(appPath) {
+    init(appPath);
     start();
+    require('ringo/engine').addShutdownHook(function() {
+        stop();
+        destroy();
+    });
     // return the server instance
     return server;
 }
