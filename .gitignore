@@ -1,4 +1,6 @@
-build/*
+build
+docs/java
+docs/modules
 lib/ringo.jar
 lib/ivy/*.jar
 lib/ringo-core.jar
