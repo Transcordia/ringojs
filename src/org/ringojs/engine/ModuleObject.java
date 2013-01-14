@@ -8,6 +8,7 @@ import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
+import org.ringojs.repository.FileResource;
 import org.ringojs.repository.Repository;
 import org.ringojs.repository.Resource;
 import org.ringojs.repository.Trackable;
@@ -38,7 +39,15 @@ public class ModuleObject extends ScriptableObject {
             return _path;
         }
         Resource res = repository.getResource(_path);
-        return  (res == null) ? _path : res.getRelativePath();
+        if (res == null) {
+            return _path;
+        } else if (res instanceof FileResource) {
+            // Return absolute path for file resources
+            return res.getPath();
+        } else {
+            // not a file, return relative path so it
+            return res.getRelativePath();
+        }
     }
 
     @JSFunction
@@ -104,8 +113,8 @@ public class ModuleObject extends ScriptableObject {
 class Singleton {
 
     final String key;
-    boolean evaluated;
-    Object value;
+    boolean evaluated = false;
+    Object value = Undefined.instance;
 
     Singleton(Trackable source, String id) {
         this.key = source.getPath() + ":" + id;
@@ -113,7 +122,7 @@ class Singleton {
 
     synchronized Object getValue(Function function, Scriptable scope,
                                  ModuleObject obj) {
-        if (!evaluated) {
+        if (!evaluated && function != null) {
             Context cx = Context.getCurrentContext();
             value = function.call(cx, scope, obj, ScriptRuntime.emptyArgs);
             evaluated = true; // only if evaluation was successful

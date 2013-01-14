@@ -151,14 +151,14 @@
 
     <properties>
         <jetty-version>8.0.4.v20111024</jetty-version>
-        <slf4j-version>1.6.4</slf4j-version>
-        <log4j-version>1.2.16</log4j-version>
-        <rhino-version>1.7R3</rhino-version>
-        <junit-version>3.8.2</junit-version>
+        <slf4j-version>1.7.2</slf4j-version>
+        <log4j-version>1.2.17</log4j-version>
+        <rhino-version>1.7R5-SNAPSHOT</rhino-version>
+        <junit-version>4.11</junit-version>
         <jnr-posix-version>1.1.9</jnr-posix-version>
         <constantine-version>0.7</constantine-version>
         <jffi-version>1.0.10</jffi-version>
-        <jaffl-version>0.5.11</jaffl-version>
+        <jaffl-version>0.5.12</jaffl-version>
         <jline-version>1.0</jline-version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>

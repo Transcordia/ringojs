@@ -5,7 +5,6 @@ import org.mozilla.classfile.ClassFileWriter;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.GeneratedClassLoader;
-import org.mozilla.javascript.NativeJavaClass;
 import org.mozilla.javascript.ScriptRuntime;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
@@ -14,25 +13,29 @@ import org.mozilla.javascript.SecurityUtilities;
 import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
+import org.ringojs.engine.Callback;
 import org.ringojs.engine.RhinoEngine;
-import org.ringojs.engine.RingoWorker;
 import org.mozilla.javascript.Undefined;
 
 import static org.mozilla.classfile.ClassFileWriter.ACC_FINAL;
 import static org.mozilla.classfile.ClassFileWriter.ACC_PRIVATE;
 import static org.mozilla.classfile.ClassFileWriter.ACC_PUBLIC;
 
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.security.CodeSource;
 import java.security.ProtectionDomain;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.WeakHashMap;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class EventAdapter extends ScriptableObject {
@@ -41,7 +44,8 @@ public class EventAdapter extends ScriptableObject {
     private Map<String,List<Callback>> callbacks = new HashMap<String,List<Callback>>();
     private Object impl;
 
-    static Map<Object, Class<?>> adapterCache = new WeakHashMap<Object, Class<?>>();
+    static Map<AdapterKey, WeakReference<Class<?>>> adapterCache =
+            new HashMap<AdapterKey, WeakReference<Class<?>>>();
     static AtomicInteger serial = new AtomicInteger();
 
     @Override
@@ -58,27 +62,27 @@ public class EventAdapter extends ScriptableObject {
     }
 
     @JSConstructor
-    @SuppressWarnings("unchecked")
     public static Object jsConstructor(Context cx, Object[] args,
                                        Function function, boolean inNewExpr) {
-        if (args.length == 0 || !(args[0] instanceof NativeJavaClass)) {
-            throw ScriptRuntime.typeError2("msg.not.java.class.arg", "1",
-                    args.length == 0 ? "undefined" : ScriptRuntime.toString(args[0]));
+        if (args.length == 0) {
+            throw ScriptRuntime.typeError("EventAdapter requires at least one argument");
         }
-        Class<?> clazz = ((NativeJavaClass) args[0]).getClassObject();
-        try {
-            // TODO we need to include event mapping in the cache lookup!
-            Class<?> adapterClass = adapterCache.get(clazz);
-            if (adapterClass == null) {
-                String className = "EventAdapter" + serial.incrementAndGet();
-                Map overrides = null;
-                if (args.length > 1 && args[1] instanceof Map) {
-                    overrides = (Map) args[1];
-                }
-                byte[] code = getAdapterClass(className, clazz, overrides);
-                adapterClass = loadAdapterClass(className, code);
-                adapterCache.put(clazz, adapterClass);
+        // First argument must be an array of java classes
+        if (!(args[0] instanceof List)) {
+            throw ScriptRuntime.typeError("First argument must be an Array or List");
+        }
+        Object[] classes = ((List)args[0]).toArray();
+        for (Object aClass : classes) {
+            if (!(aClass instanceof Class)) {
+                throw ScriptRuntime.typeError("Not a Java class: " +
+                        ScriptRuntime.toString(aClass));
             }
+        }
+        // Second argument can be a map of method names to event names
+        Map overrides = args.length > 1 && args[1] instanceof Map ?
+                (Map)args[1] : null;
+        try {
+            Class<?> adapterClass = getAdapterClass(classes, overrides);
             Scriptable scope = getTopLevelScope(function);
             RhinoEngine engine = RhinoEngine.getEngine(scope);
             Constructor cnst = adapterClass.getConstructor(EventAdapter.class);
@@ -116,7 +120,7 @@ public class EventAdapter extends ScriptableObject {
             list = new LinkedList<Callback>();
             callbacks.put(type, list);
         }
-        list.add(new Callback((Scriptable)function, sync));
+        list.add(new Callback((Scriptable)function, engine, sync));
     }
 
     @JSFunction
@@ -170,17 +174,36 @@ public class EventAdapter extends ScriptableObject {
         return false;
     }
 
-    private static byte[] getAdapterClass(String className, Class<?> clazz,
-                                          Map<String, String> overrides) {
+    public static Class<?> getAdapterClass(Object[] classes, Map<?,?> overrides) {
+        AdapterKey key = new AdapterKey(classes, overrides);
+        WeakReference<Class<?>> cachedClass = adapterCache.get(key);
+        Class<?> adapterClass = cachedClass == null ? null : cachedClass.get();
+        if (adapterClass == null) {
+            String className = "org.ringojs.adapter.EventAdapter" +
+                    serial.incrementAndGet();
+            byte[] code = getAdapterClass(className, classes, overrides);
+            adapterClass = loadAdapterClass(className, code);
+            adapterCache.put(key, new WeakReference<Class<?>>(adapterClass));
+        }
+        return adapterClass;
+    }
+
+    private static byte[] getAdapterClass(String className, Object[] classes,
+                                          Map<?,?> overrides) {
+        Set<Method> methods = new HashSet<Method>();
+        Class<?> clazz = (Class<?>)classes[0];
         boolean isInterface = clazz.isInterface();
         String superName = isInterface ? Object.class.getName() : clazz.getName();
         String adapterSignature = classToSignature(EventAdapter.class);
         ClassFileWriter cfw = new ClassFileWriter(className, superName,
                                                   "<EventAdapter>");
-        if (isInterface) {
-            cfw.addInterface(clazz.getName());
+        for (Object c : classes) {
+            clazz = (Class<?>)c;
+            if (clazz.isInterface()) {
+                cfw.addInterface(clazz.getName());
+            }
+            Collections.addAll(methods, clazz.getMethods());
         }
-        Method[] methods = clazz.getMethods();
 
         cfw.addField("events", adapterSignature, (short) (ACC_PRIVATE | ACC_FINAL));
 
@@ -196,9 +219,11 @@ public class EventAdapter extends ScriptableObject {
 
         for (Method method : methods) {
             String methodName = method.getName();
-            String eventName = overrides == null ?
-                    toEventName(methodName) : overrides.get(methodName);
-            if (eventName == null || Modifier.isFinal(method.getModifiers())) {
+            String eventName = overrides == null
+                    ? toEventName(methodName)
+                    : toStringOrNull(overrides.get(methodName));
+            int mod = method.getModifiers();
+            if (!Modifier.isAbstract(mod) && (eventName == null || Modifier.isFinal(mod))) {
                 continue;
             }
             Class<?>[]paramTypes = method.getParameterTypes();
@@ -302,7 +327,12 @@ public class EventAdapter extends ScriptableObject {
         return result;
     }
 
-    public static String toEventName(String methodName) {
+    private static String toStringOrNull(Object name) {
+        return name == null ? null : name.toString();
+    }
+
+    public static String toEventName(Object name) {
+        String methodName = ScriptRuntime.toString(name);
         int length = methodName.length();
         if (length > 2 && methodName.regionMatches(0, "on", 0, 2)
                 && Character.isUpperCase(methodName.charAt(2))) {
@@ -349,73 +379,68 @@ public class EventAdapter extends ScriptableObject {
         return ClassFileWriter.classNameToSignature(clazz.getName());
     }
 
-    /**
-     * A wrapper around a JavaScript function or (moduleId, functionName) pair.
-     * If callback is a function, the callback is bound to its current worker
-     * as the function is a closure over its scope. If the callback is a
-     * (moduleId, functionName) pair it is not bound to any worker as the
-     * module will be loaded on demand when the callback is invoked.
-     */
-    class Callback {
-        final RingoWorker worker;
-        final Object module;
-        final Object function;
-        final boolean sync;
+    static class AdapterKey {
 
-        Callback(Scriptable function, boolean sync) {
-            Scriptable scope = getTopLevelScope(function);
-            if (function instanceof Function) {
-                this.module = scope;
-                this.function = function;
-                this.worker = engine.getCurrentWorker();
-            } else {
-                this.module = getProperty(function, "module");
-                this.function = getProperty(function, "name");
-                if (module == NOT_FOUND || module == null) {
-                    throw Context.reportRuntimeError(
-                            "Callback object must contain 'module' property");
-                }
-                if (this.function == NOT_FOUND || this.function == null) {
-                    throw Context.reportRuntimeError(
-                            "Callback object must contain 'name' property");
-                }
-                this.worker = null;
-            }
-            this.sync = sync;
+        final private Object[] classes;
+        final private Map overrides;
+
+        AdapterKey(Object[] classes, Map overrides) {
+            assert classes != null;
+            this.classes = classes;
+            this.overrides = overrides;
         }
 
-        boolean equalsCallback(Scriptable callback) {
-            if (callback instanceof Function) {
-                return function == callback;
-            } else {
-                return module.equals(getProperty(callback, "module"))
-                        && function.equals(getProperty(callback, "name"));
+        @Override
+        @SuppressWarnings("unchecked")
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
             }
+            if (!(obj instanceof AdapterKey)) {
+                return false;
+            }
+            AdapterKey key = (AdapterKey)obj;
+            if (!Arrays.equals(classes, key.classes)) {
+                return false;
+            }
+            // NativeObject's equals() method doesn't follow semantics of
+            // Map.equals() so we need to compare each entry
+            if (overrides != null) {
+                if (key.overrides == null ||
+                        overrides.size() != key.overrides.size()) {
+                    return false;
+                }
+                Iterator<Map.Entry> e1 = overrides.entrySet().iterator();
+                Iterator<Map.Entry> e2 = key.overrides.entrySet().iterator();
+                while(e1.hasNext()) {
+                    if (!e1.next().equals(e2.next())) {
+                        return false;
+                    }
+                }
+            } else if (key.overrides != null) {
+                return false;
+            }
+            return true;
         }
 
-        void invoke(Object[] args) {
-            if (this.worker == null) {
-                RingoWorker worker = engine.getWorker();
-                try {
-                    invokeWithWorker(worker, args);
-                } finally {
-                    worker.releaseWhenDone();
+        @Override
+        @SuppressWarnings("unchecked")
+        public int hashCode() {
+            int h = Arrays.hashCode(classes);
+            if (overrides != null) {
+                Set<Map.Entry<?,?>> entries = overrides.entrySet();
+                int j = 0;
+                for (Map.Entry e : entries) {
+                    j += e.hashCode();
                 }
-            } else {
-                invokeWithWorker(this.worker, args);
+                h = 31 * h + j;
             }
+            return h;
         }
 
-        private void invokeWithWorker(RingoWorker worker, Object[] args) {
-            if (sync) {
-                try {
-                    worker.invoke(module, function, args);
-                } catch (Exception x) {
-                    throw new RuntimeException(x);
-                }
-            } else {
-                worker.submit(module, function, args);
-            }
+        @Override
+        public String toString() {
+            return "AdapterKey[" + Arrays.toString(classes) + "]";
         }
     }
 

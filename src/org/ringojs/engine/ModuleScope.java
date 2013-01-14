@@ -33,7 +33,8 @@ public class ModuleScope extends ImporterTopLevel {
     private Scriptable exportsObject, moduleObject;
     private static final long serialVersionUID = -2409425841990094897L;
 
-    public ModuleScope(String moduleId, Trackable source, Scriptable prototype) {
+    public ModuleScope(String moduleId, Trackable source,
+                       Scriptable prototype, RingoWorker worker) {
         setParentScope(null);
         setPrototype(prototype);
         // for activating the ImporterTopLevel import* functions

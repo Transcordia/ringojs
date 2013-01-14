@@ -66,10 +66,10 @@ function jsDump(value, lvl) {
     }
 }
 jsDump.indent = function(lvl) {
-    return strings.repeat(" ", 4 * lvl);
+    return strings.repeat("    ", lvl);
 };
 jsDump.quote = function(str) {
-    return '"' + str.toString().replace(/"/g, '\\"').replace(/\n/g, '\\n') + '"';
+    return JSON.stringify(str.toString());
 };
 
 /**
@@ -420,6 +420,7 @@ EvaluationError.prototype = new Error();
  * Executed when called from the command line
  */
 if (require.main == module.id) {
+    var system = require("system");
     if (system.args.length == 1) {
         term.writeln("Usage: bin/ringo test test/file1 test/file2");
     } else {
