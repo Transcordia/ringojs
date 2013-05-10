@@ -97,7 +97,7 @@ public class RhinoEngine implements ScopeProvider {
         contextFactory = new RingoContextFactory(this, config);
         repositories = config.getRepositories();
         wrapFactory = config.getWrapFactory();
-        
+
         loaders = new ModuleLoader[] {
             new JsModuleLoader(), new JsonModuleLoader(), new ClassModuleLoader()
         };
@@ -139,11 +139,15 @@ public class RhinoEngine implements ScopeProvider {
             if (debugger != null) {
                 debugger.setBreak();
             }
-            Runtime.getRuntime().addShutdownHook(new Thread() {
-                public void run() {
-                    shutdown();
-                }
-            });
+            try {
+                Runtime.getRuntime().addShutdownHook(new Thread() {
+                    public void run() {
+                        shutdown();
+                    }
+                });
+            } catch (java.security.AccessControlException e) {
+                log.log(Level.WARNING, "Could not register shutdown hook due to security exception", e);
+            }
         } finally {
             Context.exit();
         }
@@ -271,11 +275,35 @@ public class RhinoEngine implements ScopeProvider {
     }
 
     /**
-     * Get the worker associated with the given scope, or null.
-     * @return the worker associated with the current thread, or null.
+     * Get the worker associated with the current thread, or the given scope or function argument if provided.
+     * An {@code IllegalStateException} is thrown if no worker could be found or if different workers are
+     * associated with the current thread and the argument object.
+     *
+     * @param obj a scope or function object
+     * @throws IllegalStateException if no worker could be found, or if different workers are associates with
+     * the current thread and the argument object
+     * @return the current worker
      */
-    public RingoWorker getCurrentWorker() {
-        return currentWorker.get();
+    public RingoWorker getCurrentWorker(Scriptable obj) {
+        RingoWorker worker = currentWorker.get();  // Get worker associated with current thread
+        Scriptable scriptable = obj;
+
+        while (scriptable != null) {
+            if (scriptable instanceof ModuleScope) {
+                RingoWorker scopeWorker = ((ModuleScope) scriptable).getWorker();
+                if (worker == null) {
+                    worker = scopeWorker;
+                } else if (worker != scopeWorker) {
+                    throw new IllegalStateException("Current thread worker differs from scope worker");
+                }
+                break;
+            }
+            scriptable = scriptable.getParentScope();
+        }
+        if (worker == null) {
+            throw new IllegalStateException("No worker associated with current thread or scope");
+        }
+        return worker;
     }
 
     /**
@@ -550,7 +578,7 @@ public class RhinoEngine implements ScopeProvider {
 
         return findResource(moduleName + "/index", loaders, localPath);
     }
-    
+
     private Scriptable parseJsonResource(Resource resource) throws IOException {
         JsonParser parser = new JsonParser(Context.getCurrentContext(), globalScope);
         try {
@@ -564,7 +592,7 @@ public class RhinoEngine implements ScopeProvider {
             throw new RuntimeException(px);
         }
     }
-    
+
     private String getStringProperty(Scriptable obj, String name, String defaultValue) {
         Object value = ScriptableObject.getProperty(obj, name);
         if (value != null && value != ScriptableObject.NOT_FOUND) {
@@ -801,7 +829,7 @@ public class RhinoEngine implements ScopeProvider {
             }
             res.setAbsolute(true);
             return res;
-        } else if (localRoot != null && 
+        } else if (localRoot != null &&
                 (path.startsWith("./") || path.startsWith("../"))) {
             String newpath = localRoot.getRelativePath() + path;
             return findResource(newpath, loaders, null);
@@ -833,7 +861,7 @@ public class RhinoEngine implements ScopeProvider {
         }
         return config.getRepository(normalizePath(path));
     }
-    
+
     public ModuleLoader getModuleLoader(Resource resource) {
         String name = resource.getName();
         for (ModuleLoader loader : loaders) {
@@ -864,23 +892,23 @@ public class RhinoEngine implements ScopeProvider {
         newLoaders[length] = new ScriptedModuleLoader(extension, function);
         loaders = newLoaders;
     }
-    
+
     public synchronized void removeModuleLoader(String extension) {
         int length = loaders.length;
         for (int i = 0; i < length; i++) {
-            if (loaders[i] instanceof ScriptedModuleLoader && 
+            if (loaders[i] instanceof ScriptedModuleLoader &&
                     extension.equals(loaders[i].getExtension())) {
                 ModuleLoader[] newLoaders = new ModuleLoader[length - 1];
-                if (i > 0) 
+                if (i > 0)
                     System.arraycopy(loaders, 0, newLoaders, 0, i);
-                if (i < length - 1) 
+                if (i < length - 1)
                     System.arraycopy(loaders, i + 1, newLoaders, i, length - i - 1);
                 loaders = newLoaders;
                 return;
             }
         }
     }
-    
+
     public static String normalizePath(String path) {
         if (!path.contains("./")) {
             return path;
