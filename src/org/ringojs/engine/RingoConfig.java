@@ -134,6 +134,7 @@ public class RingoConfig {
         }
 
         // now that repositories are set up try to set default log4j configuration file
+/*
         if (System.getProperty("log4j.configuration") == null) {
             Resource log4jConfig = getResource("config/log4j.properties");
             if (log4jConfig != null && log4jConfig.exists()) {
@@ -144,6 +145,7 @@ public class RingoConfig {
                 }
             }
         }
+*/
         getLogger().config("Ringo repository list: " + repositories);
     }
 
