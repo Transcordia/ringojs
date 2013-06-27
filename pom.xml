@@ -141,11 +141,6 @@
             <url>https://github.com/oravecz</url>
         </developer>
         <developer>
-            <id>tschaub</id>
-            <name>Tim Schaub</name>
-            <url>http://github.com/ringo/ringojs/commits/master?author=tschaub</url>
-        </developer>
-        <developer>
             <id>stt</id>
             <name>Samuli Tuomola</name>
             <url>http://github.com/ringo/ringojs/commits/master?author=stt</url>
