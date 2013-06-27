@@ -5,14 +5,14 @@
 
     <groupId>org.ringojs</groupId>
     <artifactId>ringojs</artifactId>
-    <version>0.9.0.2-SNAPSHOT</version>
+    <version>0.9.0.4-SNAPSHOT</version>
 
     <packaging>jar</packaging>
 
     <name>RingoJS</name>
     <description>
-        A JavaScript runtime and shell based on Rhino providing a CommonJS conformant module library
-        and web application framework.
+        A JavaScript runtime and shell based on Rhino providing a CommonJS compliant
+        module library and web application framework.
     </description>
 
     <prerequisites>
@@ -136,6 +136,14 @@
             <id>maks</id>
             <name>Maksim Lin</name>
             <url>http://github.com/ringo/ringojs/commits/master?author=maks</url>
+            <id>oravecz</id>
+            <name>Jim Cook</name>
+            <url>https://github.com/oravecz</url>
+        </developer>
+        <developer>
+            <id>tschaub</id>
+            <name>Tim Schaub</name>
+            <url>http://github.com/ringo/ringojs/commits/master?author=tschaub</url>
         </developer>
         <developer>
             <id>stt</id>
