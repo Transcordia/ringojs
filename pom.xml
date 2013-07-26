@@ -5,7 +5,7 @@
 
     <groupId>org.ringojs</groupId>
     <artifactId>ringojs</artifactId>
-    <version>0.9.0.5-SNAPSHOT</version>
+    <version>0.9.0.6-SNAPSHOT</version>
 
     <packaging>jar</packaging>
 
@@ -34,8 +34,9 @@
     <scm>
         <url>http://github.com/pykl/ringojs</url>
         <connection>scm:git:git://github.com/pykl/ringojs.git</connection>
-        <developerConnection>scm:git:git@github.com:pykl/ringojs.git</developerConnection>
-      <tag>ringojs-0.9.0</tag>
+        <developerConnection>scm:git:git@github.com:pykl/ringojs.git
+        </developerConnection>
+      <tag>HEAD</tag>
   </scm>
 
     <!-- Distribution config is specific to each fork -->
@@ -288,7 +289,8 @@
                             <goal>copy-resources</goal>
                         </goals>
                         <configuration>
-                            <outputDirectory>${basedir}/target/classes/modules</outputDirectory>
+                            <outputDirectory>${basedir}/target/classes/modules
+                            </outputDirectory>
                             <resources>
                                 <resource>
                                     <directory>modules</directory>
@@ -385,7 +387,7 @@
         </plugins>
 
         <!-- This plugin adds support for the S3 urls used during distribution management -->
-         <extensions>
+        <extensions>
             <extension>
                 <groupId>org.springframework.build.aws</groupId>
                 <artifactId>org.springframework.build.aws.maven</artifactId>
