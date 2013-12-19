@@ -309,7 +309,26 @@ function daysInFebruary(date) {
  * @returns Number quarter of the year, between 1 and 4.
  */
 function quarterInYear(date) {
-    return Math.floor((date.getMonth() / 3) + 1);
+    switch (createGregorianCalender(date).get(java.util.Calendar.MONTH)) {
+        case java.util.Calendar.JANUARY:
+        case java.util.Calendar.FEBRUARY:
+        case java.util.Calendar.MARCH:
+            return 1;
+        case java.util.Calendar.APRIL :
+        case java.util.Calendar.MAY :
+        case java.util.Calendar.JUNE :
+            return 2;
+        case java.util.Calendar.JULY :
+        case java.util.Calendar.AUGUST :
+        case java.util.Calendar.SEPTEMBER :
+            return 3;
+        case java.util.Calendar.OCTOBER :
+        case java.util.Calendar.NOVEMBER :
+        case java.util.Calendar.DECEMBER :
+            return 4;
+    }
+
+    throw "Invalid date provided";
 }
 
 /**
@@ -362,7 +381,7 @@ function quarterInFiscalYear(date, fiscalYearStart) {
 function diff(a, b, unit) {
     var unit = unit || "day",
     mDiff = Math.abs(a.getTime() - b.getTime()),
-    yDiff = Math.abs(a.getFullYear() - b.getFullYear()),
+    yDiff = a.getFullYear() - b.getFullYear(),
     delta = mDiff;
 
     switch (unit) {
@@ -375,13 +394,13 @@ function diff(a, b, unit) {
                 "milliseconds":   Math.floor((((delta % 86400000) % 3600000) % 60000) % 1000)
             };
         case "year":
-            delta = yDiff; // just return the yDiff
+            delta = Math.abs(yDiff); // just return the yDiff
             break;
         case "quarter":
-            delta = (yDiff * 4) + Math.abs(quarterInYear(a) - quarterInYear(b));
+            delta = Math.abs((yDiff * 4) + quarterInYear(a) - quarterInYear(b));
             break;
         case "month":
-            delta = (yDiff * 12) + Math.abs(a.getMonth() - b.getMonth());
+            delta = Math.abs((yDiff * 12) + a.getMonth() - b.getMonth());
             break;
         case "week":
             delta = Math.floor(diff(a, b, "day") / 7);

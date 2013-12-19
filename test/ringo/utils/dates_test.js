@@ -190,6 +190,17 @@ exports.testQuarterInFiscalYear = function() {
     assert.equal(dates.quarterInFiscalYear(new Date(2010, 9, 6), new Date(1990, 3, 6)), 3);
     assert.equal(dates.quarterInFiscalYear(new Date(2010, 3, 5, 23, 59, 59), new Date(1990, 3, 6)), 4);
 
+    // Farmers (grassland calendar starts with 1st May)
+    assert.equal(dates.quarterInFiscalYear(new Date(2010, 3, 30), new Date(1990, 4, 1)), 4);
+    assert.equal(dates.quarterInFiscalYear(new Date(2010, 4, 1),  new Date(1990, 4, 1)), 1);
+    assert.equal(dates.quarterInFiscalYear(new Date(2010, 6, 31), new Date(1990, 4, 1)), 1);
+    assert.equal(dates.quarterInFiscalYear(new Date(2010, 7, 1),  new Date(1990, 4, 1)), 2);
+    assert.equal(dates.quarterInFiscalYear(new Date(2010, 9, 31), new Date(1990, 4, 1)), 2);
+    assert.equal(dates.quarterInFiscalYear(new Date(2010, 10, 1), new Date(1990, 4, 1)), 3);
+    assert.equal(dates.quarterInFiscalYear(new Date(2011, 0, 31), new Date(1990, 4, 1)), 3);
+    assert.equal(dates.quarterInFiscalYear(new Date(2011, 1, 1),  new Date(1990, 4, 1)), 4);
+    assert.equal(dates.quarterInFiscalYear(new Date(2011, 3, 30), new Date(1990, 4, 1)), 4);
+
     // With standard year starting on 01/01
     assert.equal(dates.quarterInFiscalYear(new Date(2010, 0, 1), new Date(1970, 0, 1)), 1);
     assert.equal(dates.quarterInFiscalYear(new Date(2010, 3, 1), new Date(1970, 0, 1)), 2);
@@ -328,7 +339,47 @@ exports.testDiff = function() {
     assert.equal(dates.diff(a, b, "quarter"), 4);
     assert.equal(dates.diff(a, b, "month"), 13);
     assert.equal(dates.diff(a, b, "week"), 56);
-    assert.equal(dates.diff(a, b, "day"), 396);
+    assert.equal(dates.diff(a, b, "day"), 397);
+
+    // no difference in quarters
+    a = new Date(2013, 11, 1); // Q4/2013
+    b = new Date(2013, 9, 1);  // Q4/2013
+    assert.equal(dates.diff(a, b, "year"), 0);
+    assert.equal(dates.diff(b, a, "year"), 0);
+    assert.equal(dates.diff(a, b, "quarter"), 0);
+    assert.equal(dates.diff(b, a, "quarter"), 0);
+
+    // 3 quarter difference, same years
+    a = new Date(2013, 2, 30); // Q1/2013
+    b = new Date(2013, 9, 2);  // Q4/2013
+    assert.equal(dates.diff(a, b, "year"), 0);
+    assert.equal(dates.diff(b, a, "year"), 0);
+    assert.equal(dates.diff(a, b, "quarter"), 3);
+    assert.equal(dates.diff(b, a, "quarter"), 3);
+
+    // 3 quarter difference, different years
+    a = new Date(2013, 8, 30); // Q3/2013
+    b = new Date(2014, 5, 30); // Q2/2013
+    assert.equal(dates.diff(a, b, "year"), 1);
+    assert.equal(dates.diff(b, a, "year"), 1);
+    assert.equal(dates.diff(a, b, "quarter"), 3);
+    assert.equal(dates.diff(b, a, "quarter"), 3);
+
+    // 4 quarter difference, different years
+    a = new Date(2012, 0, 1); // Q4/2012
+    b = new Date(2013, 0, 1);  // Q1/2013
+    assert.equal(dates.diff(a, b, "year"), 1);
+    assert.equal(dates.diff(b, a, "year"), 1);
+    assert.equal(dates.diff(a, b, "quarter"), 4);
+    assert.equal(dates.diff(b, a, "quarter"), 4);
+
+    // 1 quarter difference, different years
+    a = new Date(2012, 11, 1); // Q4/2012
+    b = new Date(2013, 0, 1);  // Q1/2013
+    assert.equal(dates.diff(a, b, "year"), 1);
+    assert.equal(dates.diff(b, a, "year"), 1);
+    assert.equal(dates.diff(a, b, "quarter"), 1);
+    assert.equal(dates.diff(b, a, "quarter"), 1);
 };
 
 exports.testOverlapping = function() {
