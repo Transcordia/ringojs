@@ -43,14 +43,14 @@
 
     <distributionManagement>
         <snapshotRepository>
-            <id>pykl-repo</id>
-            <name>pykl-repo-snapshots</name>
-            <url>s3://repo.pykl.org/snapshots</url>
+            <id>vxs-repo</id>
+            <name>vxs-repo-snapshots</name>
+            <url>s3://repo.visualxs.com/snapshots</url>
         </snapshotRepository>
         <repository>
-            <id>pykl-repo</id>
-            <name>pykl-repo-releases</name>
-            <url>s3://repo.pykl.org/releases</url>
+            <id>vxs-repo</id>
+            <name>vxs-repo-releases</name>
+            <url>s3://repo.visualxs.com/releases</url>
         </repository>
     </distributionManagement>
 
@@ -102,6 +102,11 @@
             <id>chl</id>
             <name>Christian Langreiter</name>
             <url>http://github.com/ringo/ringojs/commits/master?author=chl</url>
+        </developer>
+        <developer>
+            <id>matthias</id>
+            <name>Matthias Platzer</name>
+            <url>http://github.com/ringo/ringojs/commits/master?author=matthias</url>
         </developer>
         <developer>
             <id>gmosx</id>
