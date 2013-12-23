@@ -32,26 +32,25 @@
     <!-- SCM config is specific to each fork -->
 
     <scm>
-        <url>http://github.com/pykl/ringojs</url>
-        <connection>scm:git:git://github.com/pykl/ringojs.git</connection>
-        <developerConnection>scm:git:git@github.com:pykl/ringojs.git
-        </developerConnection>
+        <url>http://github.com/oravecz/ringojs</url>
+        <connection>scm:git:git://github.com/oravecz/ringojs.git</connection>
+        <developerConnection>scm:git:git@github.com:oravecz/ringojs.git</developerConnection>
       <tag>HEAD</tag>
   </scm>
 
     <!-- Distribution config is specific to each fork -->
 
     <distributionManagement>
-        <snapshotRepository>
-            <id>vxs-repo</id>
-            <name>vxs-repo-snapshots</name>
-            <url>s3://repo.visualxs.com/snapshots</url>
-        </snapshotRepository>
         <repository>
-            <id>vxs-repo</id>
-            <name>vxs-repo-releases</name>
+            <id>vxs-release</id>
+            <name>VisualXS Releases</name>
             <url>s3://repo.visualxs.com/releases</url>
         </repository>
+        <snapshotRepository>
+            <id>vxs-snapshot</id>
+            <name>VisualXS Snapshots</name>
+            <url>s3://repo.visualxs.com/snapshots</url>
+        </snapshotRepository>
     </distributionManagement>
 
     <developers>
@@ -160,7 +159,7 @@
         <jetty-version>8.0.4.v20111024</jetty-version>
         <slf4j-version>1.7.2</slf4j-version>
         <log4j-version>1.2.17</log4j-version>
-        <rhino-version>1.7R5-SNAPSHOT</rhino-version>
+        <rhino-version>1.7R5-ALPHA-1</rhino-version>
         <junit-version>4.11</junit-version>
         <jnr-posix-version>1.1.9</jnr-posix-version>
         <constantine-version>0.7</constantine-version>
@@ -169,6 +168,30 @@
         <jline-version>1.0</jline-version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
+
+    <repositories>
+        <repository>
+            <id>vxs-release</id>
+            <url>s3://repo.visualxs.com/releases</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+        <repository>
+            <id>vxs-snapshot</id>
+            <url>s3://repo.visualxs.com/snapshots</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
+
 
     <dependencies>
 
@@ -394,9 +417,9 @@
         <!-- This plugin adds support for the S3 urls used during distribution management -->
         <extensions>
             <extension>
-                <groupId>org.springframework.build.aws</groupId>
-                <artifactId>org.springframework.build.aws.maven</artifactId>
-                <version>3.0.0.RELEASE</version>
+                <groupId>org.kuali.maven.wagons</groupId>
+                <artifactId>maven-s3-wagon</artifactId>
+                <version>1.2.1</version>
             </extension>
         </extensions>
 
