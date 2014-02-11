@@ -5,6 +5,12 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
+    <parent>
+        <groupId>com.transcordia</groupId>
+        <artifactId>transcordia-parent</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
     <groupId>org.ringojs</groupId>
     <artifactId>ringojs</artifactId>
     <version>0.10.1.1-SNAPSHOT</version>
@@ -16,10 +22,6 @@
         A JavaScript runtime and shell based on Rhino providing a CommonJS conformant module library
         and web application framework.
     </description>
-
-    <prerequisites>
-        <maven>2.2.1</maven>
-    </prerequisites>
 
     <url>http://ringojs.org/</url>
 
@@ -34,27 +36,12 @@
     <!-- SCM config is specific to each fork -->
 
     <scm>
-        <url>http://github.com/pykl/ringojs</url>
-        <connection>scm:git:git://github.com/pykl/ringojs.git</connection>
-        <developerConnection>scm:git:git@github.com:pykl/ringojs.git
+        <url>http://github.com/transcordia/ringojs</url>
+        <connection>scm:git:git://github.com/transcordia/ringojs.git</connection>
+        <developerConnection>scm:git:git@github.com:transcordia/ringojs.git
         </developerConnection>
       <tag>HEAD</tag>
   </scm>
-
-    <!-- Distribution config is specific to each fork -->
-
-    <distributionManagement>
-        <snapshotRepository>
-            <id>pykl-repo</id>
-            <name>pykl-repo-snapshots</name>
-            <url>s3://repo.pykl.org/snapshots</url>
-        </snapshotRepository>
-        <repository>
-            <id>pykl-repo</id>
-            <name>pykl-repo-releases</name>
-            <url>s3://repo.pykl.org/releases</url>
-        </repository>
-    </distributionManagement>
 
     <developers>
         <developer>
@@ -358,15 +345,6 @@
 
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-release-plugin</artifactId>
-                <version>2.4.1</version>
-                <configuration>
-                    <allowTimestampedSnapshots>true</allowTimestampedSnapshots>
-                </configuration>
-            </plugin>
-
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
                 <version>2.2.1</version>
                 <executions>
@@ -394,15 +372,6 @@
             </plugin>
 
         </plugins>
-
-        <!-- This plugin adds support for the S3 urls used during distribution management -->
-        <extensions>
-            <extension>
-                <groupId>org.springframework.build.aws</groupId>
-                <artifactId>org.springframework.build.aws.maven</artifactId>
-                <version>3.0.0.RELEASE</version>
-            </extension>
-        </extensions>
 
     </build>
 
