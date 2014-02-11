@@ -10,6 +10,7 @@
         <echo message=" compile    --> compiles the source code to ./build/classes"/>
         <echo message=" jar        --> generates the ./lib/ringo.jar file"/>
         <echo message=" test       --> run JUnit and RingoJS tests"/>
+        <echo message=" test-dates --> runs ringo/utils/dates test in different timezones"/>
         <echo message=" docs       --> generates the API docs"/>
         <echo message=" package    --> creates RingoJS distribution"/>
         <echo message=" dpkg       --> creates RingoJS debian package"/>
@@ -21,7 +22,7 @@
     <!-- =================================================================== -->
     <target name="init">
         <property name="project" value="ringojs"/>
-        <property name="version" value="0.9"/>
+        <property name="version" value="0.10.1-SNAPSHOT"/>
 
         <property name="home" value="."/>
 
@@ -98,6 +99,121 @@
               </fileset>
             </batchtest>
         </junit>
+    </target>
+
+    <!-- =================================================================== -->
+    <!-- Runs the date test cases                                            -->
+    <!-- =================================================================== -->
+    <target name="test-dates" depends="jar">
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=UTC"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT+0"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+
+        <!-- GMT + Offset -->
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT+1"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT+2"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT+3"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT+4"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT+5"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT+6"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT+7"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT+8"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT+9"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT+10"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT+11"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT+12"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+
+        <!-- GMT - Offset -->
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT-1"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT-2"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT-3"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT-4"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT-5"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT-6"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT-7"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT-8"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT-9"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT-10"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT-11"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
+        <java jar="run.jar" fork="true" failonerror="yes">
+            <jvmarg value="-Duser.timezone=GMT-12"/>
+            <arg value="test/ringo/utils/dates_test.js"/>
+        </java>
     </target>
 
     <!-- =================================================================== -->

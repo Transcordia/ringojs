@@ -1,18 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.ringojs</groupId>
     <artifactId>ringojs</artifactId>
-    <version>0.9.0.7-SNAPSHOT</version>
+    <version>0.10.1.1-SNAPSHOT</version>
 
     <packaging>jar</packaging>
 
     <name>RingoJS</name>
     <description>
-        A JavaScript runtime and shell based on Rhino providing a CommonJS compliant
-        module library and web application framework.
+        A JavaScript runtime and shell based on Rhino providing a CommonJS conformant module library
+        and web application framework.
     </description>
 
     <prerequisites>
@@ -102,6 +104,11 @@
             <id>chl</id>
             <name>Christian Langreiter</name>
             <url>http://github.com/ringo/ringojs/commits/master?author=chl</url>
+        </developer>
+        <developer>
+            <id>matthias</id>
+            <name>Matthias Platzer</name>
+            <url>http://github.com/ringo/ringojs/commits/master?author=matthias</url>
         </developer>
         <developer>
             <id>gmosx</id>
@@ -249,18 +256,21 @@
             <groupId>org.eclipse.jetty</groupId>
             <artifactId>jetty-server</artifactId>
             <version>${jetty-version}</version>
+            <scope>provided</scope>
         </dependency>
 
         <dependency>
             <groupId>org.eclipse.jetty</groupId>
             <artifactId>jetty-xml</artifactId>
             <version>${jetty-version}</version>
+            <scope>provided</scope>
         </dependency>
 
         <dependency>
             <groupId>org.eclipse.jetty</groupId>
             <artifactId>jetty-servlet</artifactId>
             <version>${jetty-version}</version>
+            <scope>provided</scope>
         </dependency>
 
         <dependency>
@@ -289,8 +299,7 @@
                             <goal>copy-resources</goal>
                         </goals>
                         <configuration>
-                            <outputDirectory>${basedir}/target/classes/modules
-                            </outputDirectory>
+                            <outputDirectory>${basedir}/target/classes/modules</outputDirectory>
                             <resources>
                                 <resource>
                                     <directory>modules</directory>
