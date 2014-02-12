@@ -6,12 +6,12 @@
     <parent>
         <groupId>com.transcordia</groupId>
         <artifactId>transcordia-parent</artifactId>
-        <version>1.0.1</version>
+        <version>1.0.2</version>
     </parent>
 
     <groupId>org.ringojs</groupId>
     <artifactId>ringojs</artifactId>
-    <version>0.10.1.4</version>
+    <version>0.10.1.5</version>
 
     <packaging>jar</packaging>
 
@@ -259,6 +259,13 @@
         </dependency>
 
     </dependencies>
+
+    <repositories>
+        <repository>
+            <id>repo.transcordia.com</id>
+            <url>http://repo.transcordia.com/releases/</url>
+        </repository>
+    </repositories>
 
     <build>
         <sourceDirectory>src</sourceDirectory>
