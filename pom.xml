@@ -19,8 +19,8 @@
 
     <name>RingoJS</name>
     <description>
-        A JavaScript runtime and shell based on Rhino providing a CommonJS conformant module library
-        and web application framework.
+        A JavaScript runtime and shell based on Rhino providing a CommonJS conformant
+        module library and web application framework.
     </description>
 
     <url>http://ringojs.org/</url>
@@ -40,8 +40,15 @@
         <connection>scm:git:git://github.com/transcordia/ringojs.git</connection>
         <developerConnection>scm:git:git@github.com:transcordia/ringojs.git
         </developerConnection>
-      <tag>HEAD</tag>
-  </scm>
+        <tag>HEAD</tag>
+    </scm>
+
+    <repositories>
+        <repository>
+            <id>repo.transcordia.com</id>
+            <url>http://repo.transcordia.com/releases/</url>
+        </repository>
+    </repositories>
 
     <developers>
         <developer>
@@ -143,7 +150,6 @@
         <system>github</system>
         <url>http://github.com/ringo/ringojs/issues</url>
     </issueManagement>
-
 
     <properties>
         <jetty-version>8.0.4.v20111024</jetty-version>
