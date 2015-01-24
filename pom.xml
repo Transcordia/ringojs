@@ -7,14 +7,16 @@
 
     <groupId>io.ejs</groupId>
     <artifactId>ringojs</artifactId>
-    <version>0.11</version>
+    <version>0.11-ejs.1</version>
 
     <packaging>jar</packaging>
 
     <name>RingoJS</name>
+
     <description>
-        A JavaScript runtime and shell based on Rhino providing a CommonJS
-        module library and web application framework.
+        A JavaScript runtime and shell based on Rhino providing a CommonJS module library and web
+        application framework. This project is maintained by ejs.io in order to place Ringo in the
+        Central Maven repository.
     </description>
 
     <url>http://ringojs.org/</url>
@@ -138,6 +140,7 @@
     </issueManagement>
 
     <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <jetty-version>8.1.16.v20140903</jetty-version>
         <slf4j-version>1.7.10</slf4j-version>
         <log4j-version>1.2.17</log4j-version>
