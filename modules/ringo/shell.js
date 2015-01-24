@@ -1,5 +1,6 @@
 /**
- * @fileOverview provides functions to work with the Ringo shell.
+ * @fileOverview This module is preloaded in every Ringo REPL. It's functions can be used directly, e.g. you can exit
+ * the REPL by calling `quit()`.
  */
 
 var system = require('system');
@@ -16,6 +17,7 @@ try {
 
 /**
  * Write 0..n arguments to standard output.
+ * @param {*...} args...
  */
 function write() {
     var length = arguments.length;
@@ -29,6 +31,7 @@ function write() {
 
 /**
  * Write 0..n arguments to standard output, followed by a newline.
+ * @param {*...} args...
  */
 function writeln() {
     write.apply(this, arguments);
@@ -72,6 +75,7 @@ function readln(prompt, echoChar) {
  * return. You should therefore call this function as the last statement in your script.
  * Terminating the shell will exit the program.
  * @since 0.5
+ * @param {RhinoEngine} engine
  */
 function start(engine) {
     engine = engine || require('ringo/engine').getRhinoEngine();
@@ -180,6 +184,10 @@ function convert(value, nesting, visited) {
     return retval;
 }
 
+/**
+ * @param {Object} value
+ * @param {Stream} writer
+ */
 function printResult(value, writer) {
     if (typeof value !== "undefined") {
         writer = writer || term;
@@ -243,6 +251,7 @@ function printValue(value, writer, nesting) {
 
 /**
  * @param {Exception} xcept
+ * @param {Array} errors
  * @param {Boolean} verbose
  */
 function printError(xcept, errors, verbose) {

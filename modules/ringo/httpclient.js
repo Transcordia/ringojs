@@ -1,4 +1,21 @@
-var {URL, URLConnection, HttpCookie} = java.net;
+/**
+ * @fileoverview A module for sending HTTP requests and receiving HTTP responses.
+ *
+ * @example var {request} = require('ringo/httpclient');
+ * var exchange = request({
+ *    method: 'GET',
+ *    url: 'http://ringojs.org/',
+ *    headers: {
+ *       'x-custom-header': 'foobar'
+ *    }
+ * });
+ *
+ * if(exchange.status == 200) {
+ *    console.log(exchange.content);
+ * }
+ */
+
+var {URL, URLConnection, HttpCookie, Proxy, InetSocketAddress} = java.net;
 var {InputStream, BufferedOutputStream, OutputStreamWriter, BufferedWriter,
         ByteArrayOutputStream, PrintWriter, OutputStreamWriter} = java.io;
 var {GZIPInputStream, InflaterInputStream} = java.util.zip;
@@ -42,9 +59,10 @@ var prepareOptions = function(options) {
 /**
  * Of the 4 arguments to get/post all but the first (url) are optional.
  * This fn puts the right arguments - depending on their type - into the options object
- * which can be used to call request()
+ * which can be used to call request().
  * @param {Array} Arguments Array
- * @returns {Object<{url, data, success, error}>} Object holding attributes for call to request()
+ * @returns Object holding attributes for call to request()
+ * @type Object<url, data, success, error>
  */
 var extractOptionalArguments = function(args) {
 
@@ -169,7 +187,7 @@ var Cookie = function(httpCookie) {
 };
 
 /**
- * Writes the data to the connection's output stream
+ * Writes the data to the connection's output stream.
  * @param {Object} data The data
  * @param {java.net.HttpURLConnection} connection The connection
  * @param {String} charset The character set name
@@ -204,7 +222,7 @@ var writeData = function(data, connection, charset, contentType) {
 };
 
 /**
- * Generates a multipart boundary
+ * Generates a multipart boundary.
  * @returns {String} A multipart boundary
  */
 var generateBoundary = function() {
@@ -219,7 +237,7 @@ var generateBoundary = function() {
 };
 
 /**
- * Writes the multipart data to the connection's output stream
+ * Writes the multipart data to the connection's output stream.
  * @param {Object} data An object containing the multipart data
  * @param {java.net.HttpURLConnection} connection The connection to write the data to
  * @param {String} charset The charset
@@ -243,7 +261,7 @@ var writeMultipartData = function(data, connection, charset, boundary) {
 };
 
 /**
- * Reads the response and returns it as ByteArray
+ * Reads the response and returns it as ByteArray.
  * @param {java.net.HttpURLConnection} connection The connection
  * @returns {ByteArray} The response as ByteArray
  */
@@ -289,7 +307,7 @@ var Exchange = function(url, options, callbacks) {
 
     Object.defineProperties(this, {
         /**
-         * The connection used by this Exchange instance
+         * The connection used by this Exchange instance.
          * @name Exchange.prototype.connection
          */
         "connection": {
@@ -298,7 +316,7 @@ var Exchange = function(url, options, callbacks) {
             }, "enumerable": true
         },
         /**
-         * True if the request has completed, false otherwise
+         * True if the request has completed, false otherwise.
          * @name Exchange.prototype.done
          */
         "done": {
@@ -307,7 +325,7 @@ var Exchange = function(url, options, callbacks) {
             }, enumerable: true
         },
         /**
-         * The response body as String
+         * The response body as String.
          * @name Exchange.prototype.content
          */
         "content": {
@@ -319,7 +337,7 @@ var Exchange = function(url, options, callbacks) {
             }, "enumerable": true
         },
         /**
-         * The response body as ByteArray
+         * The response body as ByteArray.
          * @name Exchange.prototype.contentBytes
          */
         "contentBytes": {
@@ -336,7 +354,21 @@ var Exchange = function(url, options, callbacks) {
                 url += "?" + reqData;
             }
         }
-        connection = (new URL(url)).openConnection();
+        var url = new URL(url);
+        if (options.proxy) {
+            var host, port;
+            if (typeof(options.proxy) == "string") {
+                [host, port] = options.proxy.split(":");
+            } else {
+                host = options.proxy.host;
+                port = options.proxy.port;
+            }
+            connection = url.openConnection(
+                new Proxy(Proxy.Type.HTTP, new InetSocketAddress(host, port || 3128))
+            );
+        } else {
+            connection = url.openConnection();
+        }
         connection.setAllowUserInteraction(false);
         connection.setConnectTimeout(options.connectTimeout);
         connection.setReadTimeout(options.readTimeout);
@@ -412,7 +444,7 @@ var Exchange = function(url, options, callbacks) {
 
 Object.defineProperties(Exchange.prototype, {
     /**
-     * The URL wrapped by this Exchange instance
+     * The URL wrapped by this Exchange instance.
      * @type java.net.URL
      * @name Exchange.prototype.url
      */
@@ -422,7 +454,7 @@ Object.defineProperties(Exchange.prototype, {
         }, "enumerable": true
     },
     /**
-     * The response status code
+     * The response status code.
      * @type Number
      * @name Exchange.prototype.status
      */
@@ -432,7 +464,7 @@ Object.defineProperties(Exchange.prototype, {
         }, "enumerable": true
     },
     /**
-     * The response status message
+     * The response status message.
      * @type String
      * @name Exchange.prototype.message
      */
@@ -442,7 +474,7 @@ Object.defineProperties(Exchange.prototype, {
         }, "enumerable": true
     },
     /**
-     * The response headers
+     * The response headers.
      * @name Exchange.prototype.headers
      */
     "headers": {
@@ -451,7 +483,7 @@ Object.defineProperties(Exchange.prototype, {
         }, enumerable: true
     },
     /**
-     * The cookies set by the server
+     * The cookies set by the server.
      * @name Exchange.prototype.cookies
      */
     "cookies": {
@@ -469,7 +501,7 @@ Object.defineProperties(Exchange.prototype, {
         }, enumerable: true
     },
     /**
-     * The response encoding
+     * The response encoding.
      * @type String
      * @name Exchange.prototype.encoding
      */
@@ -479,7 +511,7 @@ Object.defineProperties(Exchange.prototype, {
         }, "enumerable": true
     },
     /**
-     * The response content type
+     * The response content type.
      * @type String
      * @name Exchange.prototype.contentType
      */
@@ -489,7 +521,7 @@ Object.defineProperties(Exchange.prototype, {
         }, "enumerable": true
     },
     /**
-     * The response content length
+     * The response content length.
      * @type Number
      * @name Exchange.prototype.contentLength
      */
@@ -514,6 +546,7 @@ Object.defineProperties(Exchange.prototype, {
  *  - `headers`: request headers
  *  - `username`: username for HTTP authentication
  *  - `password`: password for HTTP authentication
+ *  - `proxy`: proxy-settings as string ("proxy.host:port") or object {host: "hostname.org", port: 3128}
  *  - `contentType`: the contentType
  *  - `binary`: if true if content should be delivered as binary,
  *     else it will be decoded to string
@@ -566,7 +599,8 @@ var request = function(options) {
         "followRedirects": opts.followRedirects,
         "connectTimeout": opts.connectTimeout,
         "readTimeout": opts.readTimeout,
-        "binary": opts.binary
+        "binary": opts.binary,
+        "proxy": opts.proxy
     }, {
         "beforeSend": opts.beforeSend,
         "success": opts.success,
@@ -576,13 +610,14 @@ var request = function(options) {
 };
 
 /**
- * Creates an options object based on the arguments passed
+ * Creates an options object based on the arguments passed.
  * @param {String} method The request method
  * @param {String} url The URL
  * @param {String|Object|Stream|Binary} data Optional data to send to the server
  * @param {Function} success Optional success callback
  * @param {Function} error Optional error callback
  * @returns An options object
+ * @type Object<method, url, data, success, error>
  */
 var createOptions = function(method, url, data, success, error) {
     var args = Array.prototype.slice.call(arguments, 1);
@@ -599,52 +634,48 @@ var createOptions = function(method, url, data, success, error) {
 };
 
 /**
- * Executes a GET request
+ * Executes a GET request.
  * @param {String} url The URL
  * @param {Object|String} data The data to append as GET parameters to the URL
  * @param {Function} success Optional success callback
  * @param {Function} error Optional error callback
- * @returns The Exchange instance representing the request and response
- * @type Exchange
+ * @returns {Exchange} The Exchange instance representing the request and response
  */
 var get = function(url, data, success, error) {
     return request(createOptions("GET", url, data, success, error));
 };
 
 /**
- * Executes a POST request
+ * Executes a POST request.
  * @param {String} url The URL
  * @param {Object|String|Stream|Binary} data The data to send to the server
  * @param {Function} success Optional success callback
  * @param {Function} error Optional error callback
- * @returns The Exchange instance representing the request and response
- * @type Exchange
+ * @returns {Exchange} The Exchange instance representing the request and response
  */
 var post = function(url, data, success, error) {
     return request(createOptions("POST", url, data, success, error));
 };
 
 /**
- * Executes a DELETE request
+ * Executes a DELETE request.
  * @param {String} url The URL
  * @param {Object|String} data The data to append as GET parameters to the URL
  * @param {Function} success Optional success callback
  * @param {Function} error Optional error callback
- * @returns The Exchange instance representing the request and response
- * @type Exchange
+ * @returns {Exchange} The Exchange instance representing the request and response
  */
 var del = function(url, data, success, error) {
     return request(createOptions("DELETE", url, data, success, error));
 };
 
 /**
- * Executes a PUT request
+ * Executes a PUT request.
  * @param {String} url The URL
  * @param {Object|String|Stream|Binary} data The data send to the server
  * @param {Function} success Optional success callback
  * @param {Function} error Optional error callback
- * @returns The Exchange instance representing the request and response
- * @type Exchange
+ * @returns {Exchange} The Exchange instance representing the request and response
  */
 var put = function(url, data, success, error) {
     return request(createOptions("PUT", url, data, success, error));
@@ -661,7 +692,7 @@ var put = function(url, data, success, error) {
 var TextPart = function(data, charset, filename) {
 
     /**
-     * Writes this TextPart's data
+     * Writes this TextPart's data.
      * @param {String} name The name of the text part
      * @param {java.io.PrintWriter} writer The writer
      * @param {java.io.OutputStream} outStream The output stream

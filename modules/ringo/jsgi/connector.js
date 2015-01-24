@@ -1,5 +1,5 @@
 /**
- * @fileOverview Low level JSGI adapter implementation.
+ * @fileOverview Low-level JSGI adapter implementation.
  */
 
 var {Headers, getMimeParameter} = require('ringo/utils/http');
@@ -75,8 +75,8 @@ function initRequest(request) {
  * you won't need this unless you're implementing your own servlet
  * based JSGI connector.
  *
- * @param req the JSGI request argument
- * @param result the object returned by a JSGI application
+ * @param {Object} req the JSGI request argument
+ * @param {Object} result the object returned by a JSGI application
  */
 function commitResponse(req, result) {
     var request = req.env.servletRequest;
@@ -247,7 +247,7 @@ function AsyncResponse(request, timeout, autoflush) {
          * be called once.
          * @param {Number} status the HTTP status code
          * @param {Object} headers the headers
-         * @returns this response object for chaining
+         * @returns {AsyncResponse} this response object for chaining
          * @name AsyncResponse.prototype.start
          */
         start: sync(function(status, headers) {
@@ -264,7 +264,7 @@ function AsyncResponse(request, timeout, autoflush) {
           * Write a chunk of data to the response stream.
           * @param {String|Binary} data a binary or string
           * @param {String} [encoding] the encoding to use
-          * @returns this response object for chaining
+          * @returns {AsyncResponse} this response object for chaining
           * @name AsyncResponse.prototype.write
           */
         write: sync(function(data, encoding) {
@@ -284,7 +284,7 @@ function AsyncResponse(request, timeout, autoflush) {
         /**
           * Flush the response stream, causing all buffered data to be written
           * to the client.
-          * @returns this response object for chaining
+          * @returns {AsyncResponse} this response object for chaining
           * @name AsyncResponse.prototype.flush
           */
         flush: sync(function() {
@@ -340,9 +340,9 @@ function AsyncResponse(request, timeout, autoflush) {
  * Convenience function that resolves a module id or object to a
  * JSGI middleware or application function. This assumes the function is
  * exported as "middleware" or "handleRequest".
- * @param app a function, module object, module id, or an array of
+ * @param {Function|Object|String|Array} app a function, module object, module id, or an array of
  *            any of these
- * @returns the resolved middleware function
+ * @returns {Function} the resolved middleware function
  */
 function resolve(app) {
     if (typeof app == 'string') {
@@ -357,9 +357,9 @@ function resolve(app) {
 
 /**
  * Helper function for wrapping middleware stacks
- * @param inner an app or middleware module or function wrapped by outer
- * @param outer a middleware module or function wrapping inner
- * @returns the wrapped middleware function
+ * @param {Object|Function} inner an app or middleware module or function wrapped by outer
+ * @param {Object|Function} outer a middleware module or function wrapping inner
+ * @returns {Function} the wrapped middleware function
  */
 function middlewareWrapper(inner, outer) {
     return resolve(outer)(inner);

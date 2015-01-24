@@ -1,18 +1,28 @@
 /**
- * @fileoverview <p>This module provides generic logging support for Ringo
+ * @fileoverview This module provides generic logging support for Ringo
  * applications. It uses <a href="http://www.slf4j.org/">SLF4J</a> or
  * <a href="http://logging.apache.org/log4j/">Apache log4j</a> if either is
  * detected in the classpath, and will fall back to java.util.logging
- * otherwise.<p>
+ * otherwise.
  *
- * <p>If the first argument passed to any of the logging methods is a string
+ * If the first argument passed to any of the logging methods is a string
  * containing any number of curly bracket pairs ({}), the logger will interpret
  * it as format string and use any following arguments to replace the curly
  * bracket pairs. If an argument is an Error or Java Exception object, the
- * logger will render a stack trace for it and append it to the log message.</p>
+ * logger will render a stack trace for it and append it to the log message.
  *
- * <p>This module's exports object implements the [EventEmitter](../events/)
- * interface and emits logged messages using the log level name as event type.</p>
+ * This module's exports object implements the <a href="../events/index.html">EventEmitter</a>
+ * interface and emits logged messages using the log level name as event type.
+ *
+ * @example // Get a Logger for the current module
+ * var log = require('ringo/logging').getLogger(module.id);
+ *
+ * log.debug('Connected to ', url, ' [GET]');
+ * log.error('This should not occur');
+ * log.info('Info message');
+ * log.info('User {} accessed {}', username, resource);
+ * log.warn('A warning');
+ *
  */
 
 var strings = require('ringo/utils/strings');
@@ -33,8 +43,8 @@ EventEmitter.call(exports);
 /**
  * Logger class. This constructor is not exported, use this module's
  * {@link getLogger} to get a logger instance.
- * @param name the Logger name
- * @param impl the logger implementation
+ * @param {String} name the Logger name
+ * @param {Object} impl the logger implementation
  * @constructor
  * @name Logger
  * @see #getLogger()
@@ -148,7 +158,7 @@ function setConfig(resource, watchForUpdates) {
 
 /**
  * Get a logger for the given name.
- * @param {string} name the name of the logger
+ * @param {String} name the name of the logger
  * @returns {Logger} a logger instance for the given name
  */
 function getLogger(name) {
@@ -205,7 +215,7 @@ function getJavaStack(error, prefix) {
 
 /**
  * Logger implementation based on java.util.logging
- * @param name the logger name
+ * @param {String} name the logger name
  */
 function JdkLogger(name) {
 
@@ -255,7 +265,7 @@ function JdkLogger(name) {
 
 /**
  * Logger implementation based on log4j
- * @param name the logger name
+ * @param {String} name the logger name
  */
 function Log4jLogger(name) {
 
@@ -310,7 +320,7 @@ function Log4jLogger(name) {
 
 /**
  * Logger implementation based on SLF4J
- * @param name the logger name
+ * @param {String} name the logger name
  */
 function Slf4jLogger(name) {
 

@@ -1,10 +1,30 @@
 /**
- * @fileoverview <p>This module provides file and path related functionality as
- * defined by the <a href="http://wiki.commonjs.org/wiki/Filesystem/A">CommonJS
- * Filesystem/A</a> proposal.
+ * @fileoverview This module provides a file system API for the manipulation of paths,
+ * directories, files, links, and the construction of input and output streams. It follows
+ * the <a href="http://wiki.commonjs.org/wiki/Filesystem/A">CommonJS Filesystem/A</a>
+ * proposal.
  *
- * The "fs" module provides a file system API for the manipulation of paths,
- * directories, files, links, and the construction of file streams.
+ * Some file system manipulations use a wrapper around standard POSIX functions. Their
+ * functionality depends on the concrete file system and operating system. Others use
+ * the <code>java.io</code> package and work cross-platform.
+ *
+ * @example // Writes a simple text file
+ * var fs = require('fs');
+ * if (!fs.exists('test.txt')) {
+ *   var textStream = fs.open('test.txt', {
+ *     write: true,
+ *     binary: false
+ *   });
+ *   try {
+ *     textStream.write('Hello World!');
+ *     textStream.flush();
+ *   } finally {
+ *     textStream.close();
+ *   }
+ *   console.log('Wrote test.txt');
+ * } else {
+ *   console.error('test.txt already exists.');
+ * }
  */
 
 var arrays = require('ringo/utils/arrays');
@@ -85,25 +105,56 @@ export('absolute',
 
 /**
  * Open the file corresponding to `path` for reading or writing,
- * depending on the `options` argument. Returns a [binary stream][io#Stream]
- * or a [text stream][io#TextStream].
+ * depending on the `options` argument. Returns a [binary stream](../io#Stream)
+ * or a [text stream](../io/#TextStream).
  *
  * The `options` argument may contain the following properties:
  *
- *  - __read__ _(boolean)_ open the file in read mode.
+ *  - __read__ _(boolean)_ open the file in read-only mode.
  *  - __write__ _(boolean)_ open the file in write mode starting at the beginning of the file.
  *  - __append__ _(boolean)_ open the file in write mode starting at the end of the file.
  *  - __binary__ _(boolean)_ open the file in binary mode.
- *  - __charset__ _(string)_ open the file in text mode using the given encoding. Defaults to "utf8".
+ *  - __charset__ _(string)_ open the file in text mode using the given encoding. Defaults to UTF-8.
+ *
+ * Instead of an `options` object, a string with the following modes can be
+ * provided:
+ *
+ *  - __r__ _(string)_ equivalent to read-only
+ *  - __w__ _(string)_ equivalent to write
+ *  - __a__ _(string)_ equivalent to append
+ *  - __b__ _(string)_ equivalent to binary
+ *
+ * So an `options` object `{ read: true, binary: true }` and the mode string `'rb'` are
+ * functionally equivalent. <em>Note: The options canonical and exclusive proposed by CommonJS are
+ * not supported.</em>
  *
  * @param {String} path the file path
- * @param {Object} options options
- * @return {Stream} a stream object
+ * @param {Object|String} options options as object properties or as mode string
+ * @return {Stream|TextStream} a <code>Stream</code> object in binary mode, otherwise a <code>TextStream</code>
+ * @example // Opens a m4a file in binary mode
+ * var m4aStream = fs.open('music.m4a', {
+ *    binary: true,
+ *    read: true
+ * });
+ *
+ * // The equivalent call with options as string
+ * var m4aStream = fs.open('music.m4a', 'br');
+ *
+ * // Opens a text file
+ * var textStream = fs.open('example.txt', { read: true });
+ *
+ * // The equivalent call with options as string
+ * var textStream = fs.open('example.txt', 'r');
  */
 function open(path, options) {
     options = checkOptions(options);
     var file = resolveFile(path);
     var {read, write, append, update, binary, charset} = options;
+
+    if (read === true && write === true) {
+        throw new Error("Cannot open a file for reading and writing at the same time");
+    }
+
     if (!read && !write && !append && !update) {
         read = true;
     }
@@ -112,30 +163,37 @@ function open(path, options) {
     if (binary) {
         return stream;
     } else if (read || write || append) {
+        // if charset is undefined, TextStream will use utf8
         return new TextStream(stream, {charset: charset});
     } else if (update) {
+        // FIXME botic: check for invalid options before returning a stream? See issue #270
         throw new Error("update not yet implemented");
     }
 }
 
 /**
  * Opens the file corresponding to `path` for reading or writing in binary
- * mode. This function supports the same options as [open()][#open] except
- * for `binary` and `charset`.
+ * mode. The `options` argument may contain the following properties:
+ *
+ *  - __read__ _(boolean)_ open the file in read-only mode. (default)
+ *  - __write__ _(boolean)_ open the file in write mode starting at the beginning of the file.
+ *  - __append__ _(boolean)_ open the file in write mode starting at the end of the file.
  *
  * @param {String} path the file path
  * @param {Object} options options
- * @param {Object} permissions not yet supported
  * @returns {Stream}
+ * @see #open
  */
-function openRaw(path, options, permissions) {
-    // TODO many things missing here
+function openRaw(path, options) {
     var file = resolveFile(path);
     options = options || {};
-    var {read, write, append, create, exclusive, truncate} = options;
+    var {read, write, append} = options;
     if (!read && !write && !append) {
         read = true;
+    } else if (read === true && write === true) {
+        throw new Error("Cannot open a file for reading and writing at the same time");
     }
+
     if (read) {
         return new Stream(new FileInputStream(file));
     } else {
@@ -146,8 +204,8 @@ function openRaw(path, options, permissions) {
 
 /**
  * Read the content of the file corresponding to `path`. Returns a
- * String or [ByteString][binary#ByteString] object depending on the `options`
- * argument. This function supports the same options as [open()][#open].
+ * String or [ByteString](../binary/#ByteString) object depending on the `options`
+ * argument. This function supports the same options as [open()](#open).
  *
  * @param {String} path the file path
  * @param {Object} options optional options
@@ -166,15 +224,18 @@ function read(path, options) {
 
 /**
  * Open, write, flush, and close a file, writing the given content. If
- * content is a binary.ByteArray or binary.ByteString, binary mode is implied.
+ * content is a `ByteArray` or `ByteString` from the `binary` module,
+ * binary mode is implied.
  * @param {String} path
- * @param {binary.Binary|String} content
+ * @param {ByteArray|ByteString|String} content
  * @param {Object} options
+ * @see <a href="../binary/index.html#ByteArray">ByteArray</a> or
+ *      <a href="../binary/index.html#ByteString">ByteString</a> for binary data
  */
 function write(path, content, options) {
-    options = options === undefined ? {} : checkOptions(options)
-    options.write = true
-    options.binary = content instanceof Binary
+    options = options === undefined ? {} : checkOptions(options);
+    options.write = true;
+    options.binary = content instanceof Binary;
     var stream = open(path, options);
     try {
         stream.write(content);
@@ -186,8 +247,10 @@ function write(path, content, options) {
 
 /**
  * Read data from one file and write it into another using binary mode.
- * @param {String} from
- * @param {String} to
+ * @param {String} from original file
+ * @param {String} to copy to create
+ * @example // Copies file from a temporary upload directory into /var/www
+ * fs.copy('/tmp/uploads/fileA.txt', '/var/www/fileA.txt');
  */
 function copy(from, to) {
     var source = resolveFile(from);
@@ -207,8 +270,26 @@ function copy(from, to) {
  * Copy files from a source path to a target path. Files of the below the
  * source path are copied to the corresponding locations relative to the target
  * path, symbolic links to directories are copied but not traversed into.
- * @param {String} from
- * @param {String} to
+ * @param {String} from the original tree
+ * @param {String} to the destination for the copy
+ * @example Before:
+ * └── foo
+ *     ├── bar
+ *     │   └── example.m4a
+ *     └── baz
+ *
+ * // Copy foo
+ * fs.copyTree('./foo', './foo2');
+ *
+ * After:
+ * ├── foo
+ * │   ├── bar
+ * │   │   └── example.m4a
+ * │   └── baz
+ * └── foo2
+ *     ├── bar
+ *     │   └── example.m4a
+ *     └── baz
  */
 function copyTree(from, to) {
     var source = resolveFile(from).getCanonicalFile();
@@ -236,8 +317,19 @@ function copyTree(from, to) {
 }
 
 /**
- * Create the directory specified by "path" including any missing parent
+ * Create the directory specified by `path` including any missing parent
  * directories.
+ *
+ * @param {String} path the path of the tree to create
+ * @example Before:
+ * └── foo
+ *
+ * fs.makeTree('foo/bar/baz/');
+ *
+ * After:
+ * └── foo
+ *    └── bar
+ *       └── baz
  */
 function makeTree(path) {
     var file = resolveFile(path);
@@ -251,6 +343,18 @@ function makeTree(path) {
  * as discovered by depth-first traversal. Entries are in lexically sorted
  * order within directories. Symbolic links to directories are not traversed
  * into.
+ *
+ * @param {String} path the path to discover
+ * @returns {Array} array of strings with all directories lexically sorted
+ * @example // File system tree of the current working directory:
+ * .
+ * └── foo
+ *     └── bar
+ *         └── baz
+ *
+ * fs.listDirectoryTree('.');
+ * // returned array:
+ * [ '', 'foo', 'foo/bar', 'foo/bar/baz' ]
  */
 function listDirectoryTree(path) {
     path = path === '' ? '.' : String(path);
@@ -274,6 +378,20 @@ function listDirectoryTree(path) {
  * including) the given path, as discovered by depth-first traversal. Entries
  * are in lexically sorted order within directories. Symbolic links to
  * directories are returned but not traversed into.
+ *
+ * @param {String} path the path to list
+ * @returns {Array} array of strings with all discovered paths
+ * @example // File system tree of the current working directory:
+ * .
+ * ├── foo
+ * │   └── bar
+ * │       └── baz
+ * ├── musicfile.m4a
+ * └── test.txt
+ *
+ * fs.listTree('.');
+ * // returned array:
+ * ['', 'foo', 'foo/bar', 'foo/bar/baz', 'musicfile.m4a', 'test.txt']
  */
 function listTree(path) {
     path = path === '' ? '.' : String(path);
@@ -295,6 +413,20 @@ function listTree(path) {
 /**
  * Remove the element pointed to by the given path. If path points to a
  * directory, all members of the directory are removed recursively.
+ *
+ * @param {String} path the element to delete recursively
+ * @example // File system tree of the current working directory:
+ * ├── foo
+ * │   └── bar
+ * │       └── baz
+ * ├── musicfile.m4a
+ * └── test.txt
+ *
+ * fs.removeTree('foo');
+ *
+ * After:
+ * ├── musicfile.m4a
+ * └── test.txt
  */
 function removeTree(path) {
     var file = resolveFile(path);
@@ -310,18 +442,26 @@ function removeTree(path) {
 }
 
 /**
- * Check whether the given pathname is absolute.
+ * Check whether the given pathname is absolute. This is a non-standard extension,
+ * not part of CommonJS Filesystem/A.
  *
- * This is a non-standard extension, not part of CommonJS Filesystem/A.
+ * @param {String} path the path to check
+ * @returns {Boolean} true if path is absolute, false if not
+ * @example >> fs.isAbsolute('../../');
+ * false
+ * >> fs.isAbsolute('/Users/username/Desktop/example.txt');
+ * true
  */
 function isAbsolute(path) {
     return new File(path).isAbsolute();
 }
 
 /**
- * Check wheter the given pathname is relative (i.e. not absolute).
+ * Check whether the given pathname is relative (i.e. not absolute). This is a non-standard
+ * extension, not part of CommonJS Filesystem/A.
  *
- * This is a non-standard extension, not part of CommonJS Filesystem/A.
+ * @param {String} path the path to check
+ * @returns {Boolean} true if path is relative, false if not
  */
 function isRelative(path) {
     return !isAbsolute(path);
@@ -330,6 +470,11 @@ function isRelative(path) {
 /**
  * Make the given path absolute by resolving it against the current working
  * directory.
+ *
+ * @param {String} path the path to resolve
+ * @returns {String} the absolute path
+ * @example >> fs.absolute('foo/bar/test.txt');
+ * '/Users/username/Desktop/working-directory/foo/bar/test.txt'
  */
 function absolute(path) {
     return resolve(workingDirectory(), path);
@@ -339,9 +484,11 @@ function absolute(path) {
  * Return the basename of the given path. That is the path with any leading
  * directory components removed. If specified, also remove a trailing
  * extension.
- * @param {String} path
- * @param {String} ext
- * @returns {String}
+ * @param {String} path the full path
+ * @param {String} ext an optional extension to remove
+ * @returns {String} the basename
+ * @example >> fs.base('/a/b/c/foosomeext', 'someext');
+ * 'foo'
  */
 function base(path, ext) {
     var name = arrays.peek(split(path));
@@ -358,6 +505,9 @@ function base(path, ext) {
  * Return the dirname of the given path. That is the path with any trailing
  * non-directory component removed.
  * @param {String} path
+ * @returns {String} the parent directory path
+ * @example >> fs.directory('/Users/username/Desktop/example/test.txt');
+ * '/Users/username/Desktop/example'
  */
 function directory(path) {
     return new File(path).getParent() || '.';
@@ -368,6 +518,9 @@ function directory(path) {
  * in the basename of the given path, including the last dot. Returns an empty
  * string if no valid extension exists.
  * @param {String} path
+ * @returns {String} the file's extension
+ * @example >> fs.extension('test.txt');
+ * '.txt'
  */
 function extension(path) {
     var name = base(path);
@@ -383,7 +536,8 @@ function extension(path) {
  * Join a list of paths using the local file system's path separator.
  * The result is not normalized, so `join("..", "foo")` returns `"../foo"`.
  * @see http://wiki.commonjs.org/wiki/Filesystem/Join
- *
+ * @example // build path to the config.json file
+ * var fullPath = fs.join(configDir, "config.json");
  */
 function join() {
     // filter out empty strings to avoid join("", "foo") -> "/foo"
@@ -394,6 +548,9 @@ function join() {
 /**
  * Split a given path into an array of path components.
  * @param {String} path
+ * @returns {Array} the path components
+ * @example >> fs.split('/Users/someuser/Desktop/subdir/test.txt');
+ * [ '', 'Users', 'someuser', 'Desktop', 'subdir', 'test.txt' ]
  */
 function split(path) {
     if (!path) {
@@ -405,6 +562,10 @@ function split(path) {
 /**
  * Normalize a path by removing '.' and simplifying '..' components, wherever
  * possible.
+ * @param {String} path
+ * @returns {String} the normalized path
+ * @example >> fs.normal('../redundant/../foo/./bar.txt');
+ * '../foo/bar.txt'
  */
 function normal(path) {
     return resolve(path);
@@ -415,6 +576,11 @@ function normal(path) {
  * Join a list of paths by starting at an empty location and iteratively
  * "walking" to each path given. Correctly takes into account both relative and
  * absolute paths.
+ *
+ * @param {String...} paths... the paths to resolve
+ * @return {String} the joined path
+ * @example >> fs.resolve('../.././foo/file.txt', 'bar/baz/', 'test.txt');
+ * '../../foo/bar/baz/test.txt'
  */
 function resolve() {
     var root = '';
@@ -470,6 +636,11 @@ function resolve() {
  * directory.
  * @param {String} source
  * @param {String} target
+ * @returns {String} the path needed to change from source to target
+ * @example >> fs.relative('foo/bar/', 'foo/baz/');
+ * '../baz/'
+ * >> fs.relative('foo/bar/', 'foo/bar/baz/');
+ * 'baz/'
  */
 function relative(source, target) {
     if (!target) {
@@ -497,9 +668,11 @@ function relative(source, target) {
 
 /**
  * Move a file from `source` to `target`.
- * @param {string} source the source path
- * @param {string} target the target path
+ * @param {String} source the source path
+ * @param {String} target the target path
  * @throws Error
+ * @example // Moves file from a temporary upload directory into /var/www
+ * fs.move('/tmp/uploads/fileA.txt', '/var/www/fileA.txt');
  */
 function move(source, target) {
     var from = resolveFile(source);
@@ -512,7 +685,7 @@ function move(source, target) {
 /**
  * Remove a file at the given `path`. Throws an error if `path` is not a file
  * or a symbolic link to a file.
- * @param {string} path the path of the file to remove.
+ * @param {String} path the path of the file to remove.
  * @throws Error if path is not a file or could not be removed.
  */
 function remove(path) {
@@ -527,7 +700,7 @@ function remove(path) {
 
 /**
  * Return true if the file denoted by `path` exists, false otherwise.
- * @param {string} path the file path.
+ * @param {String} path the file path.
  */
 function exists(path) {
     var file = resolveFile(path);
@@ -536,7 +709,7 @@ function exists(path) {
 
 /**
  * Return the path name of the current working directory.
- * @returns {string} the current working directory
+ * @returns {String} the current working directory
  */
 function workingDirectory() {
     return java.lang.System.getProperty('user.dir') + SEPARATOR;
@@ -544,7 +717,7 @@ function workingDirectory() {
 
 /**
  * Set the current working directory to `path`.
- * @param {string} path the new working directory
+ * @param {String} path the new working directory
  */
 function changeWorkingDirectory(path) {
     path = new File(path).getCanonicalPath();
@@ -565,9 +738,19 @@ function removeDirectory(path) {
 }
 
 /**
- * Returns an array with all the names of files contained in the direcory `path`.
- * @param {string} path the directory path
- * @returns {Array} a list of file names
+ * Returns an array of strings naming the files and directories in
+ * the given directory. There is no guarantee that the strings are in
+ * any specific order.
+ *
+ * @example var names = fs.list('/usr/local/');
+ * names.forEach(function(name) {
+ *   var fullPath = fs.join(dir, name);
+ *   if (fs.isFile(fullPath)) {
+ *     // do something with the file
+ *   }
+ * });
+ * @param {String} path the directory path
+ * @returns {Array} an array of strings with the files, directories, or symbolic links
  */
 function list(path) {
     var file = resolveFile(path);
@@ -585,8 +768,8 @@ function list(path) {
 /**
  * Returns the size of a file in bytes, or throws an exception if the path does
  * not correspond to an accessible path, or is not a regular file or a link.
- * @param {string} path the file path
- * @returns {number} the file size in bytes
+ * @param {String} path the file path
+ * @returns {Number} the file size in bytes
  * @throws Error if path is not a file
  */
 function size(path) {
@@ -599,8 +782,8 @@ function size(path) {
 
 /**
  * Returns the time a file was last modified as a Date object.
- * @param {string} path the file path
- * @returns the date the file was last modified
+ * @param {String} path the file path
+ * @returns {Date} the date the file was last modified
  */
 function lastModified(path) {
     var file = resolveFile(path);
@@ -613,8 +796,12 @@ function lastModified(path) {
  * directories of `path` are not present. If a `permissions` argument is passed
  * to this function it is used to create a Permissions instance which is
  * applied to the given path during directory creation.
- * @param {string} path the file path
- * @param {number|object} permissions optional permissions
+ *
+ * This function wraps the POSIX <code>mkdir()</code> function.
+ *
+ * @param {String} path the file path
+ * @param {Number|Object} permissions optional permissions
+ * @see <a href="http://pubs.opengroup.org/onlinepubs/9699919799/utilities/mkdir.html">POSIX <code>mkdir</code></a>
  */
 function makeDirectory(path, permissions) {
     if (security) security.checkWrite(path);
@@ -628,8 +815,8 @@ function makeDirectory(path, permissions) {
 
 /**
  * Returns true if the file specified by path exists and can be opened for reading.
- * @param {string} path the file path
- * @returns {boolean} whether the file exists and is readable
+ * @param {String} path the file path
+ * @returns {Boolean} whether the file exists and is readable
  */
 function isReadable(path) {
     return resolveFile(path).canRead();
@@ -637,8 +824,8 @@ function isReadable(path) {
 
 /**
  * Returns true if the file specified by path exists and can be opened for writing.
- * @param {string} path the file path
- * @returns {boolean} whether the file exists and is writable
+ * @param {String} path the file path
+ * @returns {Boolean} whether the file exists and is writable
  */
 function isWritable(path) {
     return resolveFile(path).canWrite();
@@ -646,8 +833,8 @@ function isWritable(path) {
 
 /**
  * Returns true if the file specified by path exists and is a regular file.
- * @param {string} path the file path
- * @returns {boolean} whether the file exists and is a file
+ * @param {String} path the file path
+ * @returns {Boolean} whether the file exists and is a file
  */
 function isFile(path) {
     return resolveFile(path).isFile();
@@ -655,8 +842,8 @@ function isFile(path) {
 
 /**
  * Returns true if the file specified by path exists and is a directory.
- * @param {string} path the file path
- * @returns {boolean} whether the file exists and is a directory
+ * @param {String} path the file path
+ * @returns {Boolean} whether the file exists and is a directory
  */
 function isDirectory(path) {
     return resolveFile(path).isDirectory();
@@ -664,8 +851,13 @@ function isDirectory(path) {
 
 /**
  * Return true if target file is a symbolic link, false otherwise.
- * @param {string} path the file path
- * @returns true if the given file exists and is a symbolic link
+ *
+ * This function wraps the POSIX <code>lstat()</code> function to get the
+ * symbolic link status.
+ *
+ * @param {String} path the file path
+ * @returns {Boolean} true if the given file exists and is a symbolic link
+ * @see <a href="http://pubs.opengroup.org/onlinepubs/9699919799/functions/lstat.html">POSIX <code>lstat</code></a>
  */
 function isLink(path) {
     if (security) security.checkRead(path);
@@ -688,8 +880,14 @@ function isLink(path) {
  * Returns whether two paths refer to the same storage (file or directory),
  * either by virtue of symbolic or hard links, such that modifying one would
  * modify the other.
- * @param {string} pathA the first path
- * @param {string} pathB the second path
+ *
+ * This function uses the POSIX <code>stat()</code> function to compare two
+ * files or links.
+ *
+ * @param {String} pathA the first path
+ * @param {String} pathB the second path
+ * @returns {Boolean} true if identical, otherwise false
+ * @see <a href="http://pubs.opengroup.org/onlinepubs/9699919799/functions/stat.html">POSIX <code>stat</code></a>
  */
 function same(pathA, pathB) {
     if (security) {
@@ -708,8 +906,14 @@ function same(pathA, pathB) {
 
 /**
  * Returns whether two paths refer to an entity of the same file system.
- * @param {string} pathA the first path
- * @param {string} pathB the second path
+ *
+ * This function uses the POSIX <code>stat()</code> function to compare two
+ * paths by checking if the associated devices are identical.
+ *
+ * @param {String} pathA the first path
+ * @param {String} pathB the second path
+ * @returns {Boolean} true if same file system, otherwise false
+ * @see <a href="http://pubs.opengroup.org/onlinepubs/9699919799/functions/stat.html">POSIX <code>stat</code></a>
  */
 function sameFilesystem(pathA, pathB) {
     if (security) {
@@ -729,8 +933,8 @@ function sameFilesystem(pathA, pathB) {
  * Returns the canonical path to a given abstract path. Canonical paths are both
  * absolute and intrinsic, such that all paths that refer to a given file
  * (whether it exists or not) have the same corresponding canonical path.
- * @param {string} path a file path
- * @returns the canonical path
+ * @param {String} path a file path
+ * @returns {String} the canonical path
  */
 function canonical(path) {
     return resolveFile(path).getCanonicalPath();
@@ -740,7 +944,7 @@ function canonical(path) {
  * Sets the modification time of a file or directory at a given path to a
  * specified time, or the current time. Creates an empty file at the given path
  * if no file or directory exists, using the default permissions.
- * @param {string} path the file path
+ * @param {String} path the file path
  * @param {Date} mtime optional date
  */
 function touch(path, mtime) {
@@ -753,8 +957,14 @@ function touch(path, mtime) {
 
 /**
  * Creates a symbolic link at the target path that refers to the source path.
- * @param {string} source the source file
- * @param {string} target the target link
+ * The concrete implementation depends on the file system and the operating system.
+ *
+ * This function wraps the POSIX <code>symlink()</code> function, which may not work
+ * on Microsoft Windows platforms.
+ *
+ * @param {String} source the source file
+ * @param {String} target the target link
+ * @see <a href="http://pubs.opengroup.org/onlinepubs/9699919799/functions/symlink.html">POSIX <code>symlink</code></a>
  */
 function symbolicLink(source, target) {
     if (security) {
@@ -767,8 +977,14 @@ function symbolicLink(source, target) {
 
 /**
  * Creates a hard link at the target path that refers to the source path.
- * @param {string} source the source file
- * @param {string} target the target file
+ * The concrete implementation depends on the file system and the operating system.
+ *
+ * This function wraps the POSIX <code>link()</code> function, which may not work
+ * on Microsoft Windows platforms.
+ *
+ * @param {String} source the source file
+ * @param {String} target the target file
+ * @see <a href="http://pubs.opengroup.org/onlinepubs/9699919799/functions/link.html">POSIX <code>link</code></a>
  */
 function hardLink(source, target) {
     if (security) {
@@ -781,7 +997,12 @@ function hardLink(source, target) {
 
 /**
  * Returns the immediate target of the symbolic link at the given `path`.
- * @param {string} path a file path
+ *
+ * This function wraps the POSIX <code>readlink()</code> function, which may not work
+ * on Microsoft Windows platforms.
+ *
+ * @param {String} path a file path
+ * @see <a href="http://pubs.opengroup.org/onlinepubs/9699919799/functions/readlink.html">POSIX <code>readlink</code></a>
  */
 function readLink(path) {
     if (security) security.checkRead(path);
@@ -790,8 +1011,14 @@ function readLink(path) {
 }
 
 /**
- * Returns a generator that produces the file names of a directory.
- * @param {string} path a directory path
+ * Returns a Rhino-specific generator that produces the file names of a directory.
+ * There is no guarantee that the produced strings are in any specific order.
+ * @param {String} path a directory path
+ * @see <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Iterators_and_Generators">MDN Iterators and Generators</a>
+ * @example // Iterates over the current working directory
+ * for (var name in fs.iterate(".")) {
+ *   console.log(name);
+ * }
  */
 function iterate(path) {
     var iter = function() {
@@ -807,8 +1034,8 @@ function iterate(path) {
 
 /**
  * The Permissions class describes the permissions associated with a file.
- * @param {number|object} permissions a number or object representing the permissions.
- * @param constructor
+ * @param {Number|Object} permissions a number or object representing the permissions.
+ * @param {Function} constructor
  */
 function Permissions(permissions, constructor) {
     if (!(this instanceof Permissions)) {
@@ -904,8 +1131,11 @@ function group(path) {
 }
 
 /**
+ * Changes the permissions of the specified file. This function wraps the
+ * POSIX <code>chmod()</code> function.
  * @param {String} path
  * @param {Number|Object} permissions
+ * @see <a href="http://pubs.opengroup.org/onlinepubs/9699919799/functions/chmod.html">POSIX <code>chmod</code></a>
  */
 function changePermissions(path, permissions) {
     if (security) security.checkWrite(path);
@@ -919,9 +1149,13 @@ function changePermissions(path, permissions) {
 }
 
 /**
- * Supports user name string as well as uid int input.
+ * Changes the owner of the specified file. This function wraps the
+ * POSIX <code>chown()</code> function. Supports user name string as well
+ * as uid number input.
+ *
  * @param {String} path
- * @param {String|Number} group
+ * @param {String|Number} owner the user name string or uid number
+ * @see <a href="http://pubs.opengroup.org/onlinepubs/9699919799/functions/chown.html">POSIX <code>chown</code></a>
  */
 function changeOwner(path, user) {
     if (security) security.checkWrite(path);
@@ -931,9 +1165,13 @@ function changeOwner(path, user) {
 }
 
 /**
- * Supports group name string as well as gid int input.
+ * Changes the group of the specified file. This function wraps the
+ * POSIX <code>chown()</code> function. Supports group name string
+ * as well as gid number input.
+ *
  * @param {String} path
- * @param {String|Number} group
+ * @param {String|Number} group group name string or gid number
+ * @see <a href="http://pubs.opengroup.org/onlinepubs/9699919799/functions/chown.html">POSIX <code>chown</code></a>
  */
 function changeGroup(path, group) {
     if (security) security.checkWrite(path);
@@ -1002,9 +1240,11 @@ function applyMode(mode) {
             options.binary = true;
             break;
         case 'x':
+            // FIXME botic: is this implemented?
             options.exclusive = true;
             break;
         case 'c':
+            // FIXME botic: is this needed?
             options.canonical = true;
             break;
         default:
@@ -1083,6 +1323,7 @@ Path.prototype.resolve = function () {
 /**
  * Return the relative path from this path to the given target path. Equivalent
  * to `fs.Path(fs.relative(this, target))`.
+ * @param {String} target
  */
 Path.prototype.to = function (target) {
     return exports.Path(relative(this.toString(), target));
@@ -1091,6 +1332,7 @@ Path.prototype.to = function (target) {
 /**
  * Return the relative path from the given source path to this path. Equivalent
  * to `fs.Path(fs.relative(source, this))`.
+ * @param {String} target
  */
 Path.prototype.from = function (target) {
     return exports.Path(relative(target, this.toString()));

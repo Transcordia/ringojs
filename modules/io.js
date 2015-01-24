@@ -1,7 +1,13 @@
 /**
- * @fileoverview <p>This module implements the Stream/TextStream classes as per
- * the <a href="http://wiki.commonjs.org/wiki/IO/A">CommonJS IO/A</a>
- * proposal.</p>
+ * @fileoverview This module provides functions for reading and writing streams of raw bytes.
+ * It implements the <code>Stream</code> and <code>TextStream</code> classes as per
+ * the <a href="http://wiki.commonjs.org/wiki/IO/A">CommonJS IO/A</a> proposal.
+ *
+ * Streams are closely related with two other modules. Low-level byte manipulation is provided
+ * by the <a href="../binary/index.html"><code>binary</code></a> module
+ * and uses the <code>ByteArray</code> or <code>ByteString</code> class. The
+ * <a href="../fs/index.html"><code>fs</code></a> module returns <code>io</code> streams for reading and
+ * writing files.
  */
 
 var {Binary, ByteArray, ByteString} = require("binary");
@@ -14,9 +20,6 @@ defineClass(org.ringojs.wrappers.Stream);
  * @constructor
  */
 exports.Stream = Stream;
-
-/** @ignore provides Narwhal compatibility */
-exports.IO = Stream;
 
 var {InputStreamReader, BufferedReader, OutputStreamWriter, BufferedWriter} = java.io;
 
@@ -59,10 +62,10 @@ Stream.prototype.forEach = function(fn, thisObj) {
  * If the constructor is called with a Number argument, a ByteArray with the
  * given length is allocated and the length of the stream is set to zero.
  *
- * If the argument is a [binary object][binary] it will be used as underlying
+ * If the argument is a [binary object](../binary) it will be used as underlying
  * buffer and the stream length set to the length of the binary object.
- * If argument is a [ByteArray][binary#ByteArray], the resulting stream is both
- * readable, writable, and seekable. If it is a [ByteString][binary#ByteString],
+ * If argument is a [ByteArray](../binary#ByteArray), the resulting stream is both
+ * readable, writable, and seekable. If it is a [ByteString](../binary#ByteString),
  * the resulting stream is readable and seekable but not writable.
  *
  * If called without argument, a ByteArray of length 1024 is allocated as buffer.
@@ -332,11 +335,11 @@ exports.MemoryStream = function MemoryStream(binaryOrNumber) {
  * @param {Object} options the options object. Supports the following properties:
  *        <ul><li>charset: string containing the name of the encoding to use.
  *            Defaults to "utf8".</li>
- *        <li>newline: string containing the newline character sequence to use.
- *            Defaults to "\n".</li>
+ *        <li>newline: string containing the newline character sequence to use in
+ *            writeLine() and writeLines(). Defaults to "\n".</li>
  *        <li>delimiter: string containing the delimiter to use in print().
  *            Defaults to " ".</li></ul>
- * @param {number} buflen optional buffer size. Defaults to 8192.
+ * @param {Number} buflen optional buffer size. Defaults to 8192.
  * @constructor
  */
 exports.TextStream = function TextStream(io, options, buflen) {
@@ -386,7 +389,7 @@ exports.TextStream = function TextStream(io, options, buflen) {
     /**
      * Reads a line from this stream. If the end of the stream is reached
      * before any data is gathered, returns an empty string. Otherwise, returns
-     * the line including the newline.
+     * the line including only the newline character. Carriage return will be dropped.
      * @returns {String} the next line
      */
     this.readLine = function () {
@@ -408,6 +411,15 @@ exports.TextStream = function TextStream(io, options, buflen) {
      * Returns the next line of input without the newline. Throws
      * `StopIteration` if the end of the stream is reached.
      * @returns {String} the next line
+     * @example var fs = require('fs');
+     * var txtStream = fs.open('./browserStats.csv', 'r');
+     * try {
+     *   while (true) {
+     *      console.log(txtStream.next());
+     *   }
+     * } catch (e) {
+     *   console.log("EOF");
+     * }
      */
     this.next = function () {
         var line = decoder.readLine(false);
@@ -421,6 +433,10 @@ exports.TextStream = function TextStream(io, options, buflen) {
      * Calls `callback` with each line in the input stream.
      * @param {Function} callback the callback function
      * @param {Object} [thisObj] optional this-object to use for callback
+     * @example var txtStream = fs.open('./browserStats.csv', 'r');
+     * txtStream.forEach(function(line) {
+     *   console.log(line); // Print one single line
+     * });
      */
     this.forEach = function (callback, thisObj) {
         var line = decoder.readLine(false);
@@ -436,6 +452,11 @@ exports.TextStream = function TextStream(io, options, buflen) {
      * empty string, but it does include a trailing newline at the end of every
      * line.
      * @returns {Array} an array of lines
+     * @example >> var fs = require('fs');
+     * >> var txtStream = fs.open('./sampleData.csv', 'r');
+     * >> var lines = txtStream.readLines();
+     * >> console.log(lines.length + ' lines');
+     * 6628 lines
      */
     this.readLines = function () {
         var lines = [];
@@ -457,15 +478,17 @@ exports.TextStream = function TextStream(io, options, buflen) {
     };
 
     /**
-     * Not implemented for TextStraim. Calling this method will raise an error.
+     * Not implemented for `TextStream`. Calling this method will raise an error.
      */
-    this.readInto = function (buffer) {
+    this.readInto = function () {
         throw new Error("Not implemented");
     };
 
     /**
-     * Reads from this stream with [readLine][#readLine], writing the results
+     * Reads from this stream with [readLine](#readLine), writing the results
      * to the target stream and flushing, until the end of this stream is reached.
+     * @param {Stream} output
+     * @return {TextStream} this stream
      */
     this.copy = function (output) {
         while (true) {
@@ -479,8 +502,19 @@ exports.TextStream = function TextStream(io, options, buflen) {
 
     /**
      * Writes all arguments to the stream.
+     * @return {TextStream} this stream
+     * @example >> var fs = require('fs');
+     * >> var txtOutStream = fs.open('./demo.txt', 'w');
+     * >> txtOutStream.write('foo', 'bar', 'baz');
+     *
+     * // demo.txt content:
+     * foobarbaz
      */
     this.write = function () {
+        if (!io.writable()) {
+            throw new Error("The TextStream is not writable!");
+        }
+
         for (var i = 0; i < arguments.length; i++) {
             encoder.encode(String(arguments[i]));
         }
@@ -489,6 +523,8 @@ exports.TextStream = function TextStream(io, options, buflen) {
 
     /**
      * Writes the given line to the stream, followed by a newline.
+     * @param {String} line
+     * @return {TextStream} this stream
      */
     this.writeLine = function (line) {
         this.write(line + newline);
@@ -497,8 +533,10 @@ exports.TextStream = function TextStream(io, options, buflen) {
 
     /**
      * Writes the given lines to the stream, terminating each line with a newline.
-     *
      * This is a non-standard extension, not part of CommonJS IO/A.
+     *
+     * @param {Array} lines
+     * @return {TextStream} this stream
      */
     this.writeLines = function (lines) {
         lines.forEach(this.writeLine, this);
@@ -508,6 +546,13 @@ exports.TextStream = function TextStream(io, options, buflen) {
     /**
      * Writes all argument values as a single line, delimiting the values using
      * a single blank.
+     * @example >> var fs = require('fs');
+     * >> var txtOutStream = fs.open('./demo.txt', 'w');
+     * >> txtOutStream.print('foo', 'bar', 'baz');
+     *
+     * // demo.txt content:
+     * foo bar baz
+     * @return {TextStream} this stream
      */
     this.print = function () {
         for (var i = 0; i < arguments.length; i++) {
@@ -537,7 +582,7 @@ exports.TextStream = function TextStream(io, options, buflen) {
     };
 
     /**
-     * If the wrapped stream is a [MemoryStream][#MemoryStream] this contains its
+     * If the wrapped stream is a [MemoryStream](#MemoryStream) this contains its
      * content decoded to a String with this streams encoding. Otherwise contains
      * an empty String.
      */

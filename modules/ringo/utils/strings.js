@@ -19,10 +19,51 @@ var APATTERN = /[^a-zA-Z]/;
 var NUMPATTERN = /[^0-9]/;
 var FILEPATTERN = /[^a-zA-Z0-9-_\. ]/;
 var HEXPATTERN = /[^a-fA-F0-9]/;
-// Email and URL RegExps contributed by Scott Gonzalez: http://projects.scottsplayground.com/email_address_validation/
+
+// Email RegExp contributed by Scott Gonzalez (http://projects.scottsplayground.com/email_address_validation/)
 // licensed unter MIT license - http://www.opensource.org/licenses/mit-license.php
 var EMAILPATTERN = /^((([a-z]|\d|[!#\$%&'\*\+\-\/=\?\^_`{\|}~]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])+(\.([a-z]|\d|[!#\$%&'\*\+\-\/=\?\^_`{\|}~]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])+)*)|((\x22)((((\x20|\x09)*(\x0d\x0a))?(\x20|\x09)+)?(([\x01-\x08\x0b\x0c\x0e-\x1f\x7f]|\x21|[\x23-\x5b]|[\x5d-\x7e]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(\\([\x01-\x09\x0b\x0c\x0d-\x7f]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF]))))*(((\x20|\x09)*(\x0d\x0a))?(\x20|\x09)+)?(\x22)))@((([a-z]|\d|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(([a-z]|\d|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])([a-z]|\d|-|\.|_|~|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])*([a-z]|\d|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])))\.)+(([a-z]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(([a-z]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])([a-z]|\d|-|\.|_|~|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])*([a-z]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])))\.?$/i;
-var URLPATTERN = /^(https?|ftp):\/\/(((([a-z]|\d|-|\.|_|~|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(%[\da-f]{2})|[!\$&'\(\)\*\+,;=]|:)*@)?(((\d|[1-9]\d|1\d\d|2[0-4]\d|25[0-5])\.(\d|[1-9]\d|1\d\d|2[0-4]\d|25[0-5])\.(\d|[1-9]\d|1\d\d|2[0-4]\d|25[0-5])\.(\d|[1-9]\d|1\d\d|2[0-4]\d|25[0-5]))|((([a-z]|\d|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(([a-z]|\d|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])([a-z]|\d|-|\.|_|~|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])*([a-z]|\d|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])))\.)+(([a-z]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(([a-z]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])([a-z]|\d|-|\.|_|~|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])*([a-z]|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])))\.?)(:\d*)?)(\/((([a-z]|\d|-|\.|_|~|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(%[\da-f]{2})|[!\$&'\(\)\*\+,;=]|:|@)+(\/(([a-z]|\d|-|\.|_|~|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(%[\da-f]{2})|[!\$&'\(\)\*\+,;=]|:|@)*)*)?)?(\?((([a-z]|\d|-|\.|_|~|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(%[\da-f]{2})|[!\$&'\(\)\*\+,;=]|:|@)|[\uE000-\uF8FF]|\/|\?)*)?(\#((([a-z]|\d|-|\.|_|~|[\u00A0-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF])|(%[\da-f]{2})|[!\$&'\(\)\*\+,;=]|:|@)|\/|\?)*)?$/i;
+
+// URL RegExp contributed by Diego Perini
+// licensed unter MIT license - https://gist.github.com/dperini/729294
+// Copyright (c) 2010-2013 Diego Perini (http://www.iport.it)
+var URLPATTERN = java.util.regex.Pattern.compile("^" +
+    // protocol identifier
+    "(?:(?:https?|ftp)://)" +
+    // user:pass authentication
+    "(?:\\S+(?::\\S*)?@)?" +
+    "(?:" +
+        // IP address exclusion
+        // private & local networks
+        "(?!(?:10|127)(?:\\.\\d{1,3}){3})" +
+        "(?!(?:169\\.254|192\\.168)(?:\\.\\d{1,3}){2})" +
+        "(?!172\\.(?:1[6-9]|2\\d|3[0-1])(?:\\.\\d{1,3}){2})" +
+        // IP address dotted notation octets
+        // excludes loopback network 0.0.0.0
+        // excludes reserved space >= 224.0.0.0
+        // excludes network & broacast addresses
+        // (first & last IP address of each class)
+        "(?:[1-9]\\d?|1\\d\\d|2[01]\\d|22[0-3])" +
+        "(?:\\.(?:1?\\d{1,2}|2[0-4]\\d|25[0-5])){2}" +
+        "(?:\\.(?:[1-9]\\d?|1\\d\\d|2[0-4]\\d|25[0-4]))" +
+    "|" +
+        // host name
+        "(?:(?:[a-z\\u00a1-\\uffff0-9]+-?)*[a-z\\u00a1-\\uffff0-9]+)" +
+        // domain name
+        "(?:\\.(?:[a-z\\u00a1-\\uffff0-9]+-?)*[a-z\\u00a1-\\uffff0-9]+)*" +
+        // TLD identifier
+        "(?:\\.(?:[a-z\\u00a1-\\uffff]{2,}))" +
+    ")" +
+    // port number
+    "(?::\\d{2,5})?" +
+    // resource path
+    "(?:/[^\\s]*)?" +
+"$", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+// Copyright (c) 2014 Chris O'Hara cohara87@gmail.com
+// licensed unter MIT license - https://github.com/chriso/validator.js/blob/master/LICENSE
+var INT = /^(?:[-+]?(?:0|[1-9][0-9]*))$/;
+var FLOAT = /^(?:[-+]?(?:[0-9]*))(?:\.[0-9]*)?(?:[eE][\+\-]?(?:[0-9]+))?$/;
 
 var {Binary, ByteArray, ByteString} = require('binary');
 var base64;
@@ -63,6 +104,8 @@ export('isDateFormat',
        'b16decode',
        'b64encode',
        'b64decode',
+       'y64encode',
+       'y64decode',
        'stripTags',
        'escapeHtml',
        'escapeRegExp',
@@ -70,12 +113,17 @@ export('isDateFormat',
        'compose',
        'random',
        'join',
-       'format');
+       'format',
+       'isUpperCase',
+       'isLowerCase',
+       'isInt',
+       'isFloat');
 
 /**
- * checks if a date format pattern is correct
+ * Checks if a date format pattern is correct and a valid string to create a
+ * new `java.text.SimpleDateFormat` from it.
  * @param {String} string the string
- * @returns Boolean true if the pattern is correct
+ * @returns {Boolean} true if the pattern is correct
  */
 function isDateFormat(string) {
     try {
@@ -87,12 +135,11 @@ function isDateFormat(string) {
 }
 
 /**
- * parse a timestamp into a date object. This is used when users
- * want to set createtime explicitly when creating/editing stories.
+ * Parse a timestamp into a `Date` object.
  * @param {String} string the string
  * @param {String} format date format to be applied
- * @param {Object} timezone Java TimeZone Object (optional)
- * @returns {Object} the resulting date
+ * @param {java.util.TimeZone} timezone Java TimeZone Object (optional)
+ * @returns {Date} the resulting date
  */
 function toDate(string, format, timezone) {
     var simpleDateFormat = new java.text.SimpleDateFormat(format);
@@ -103,41 +150,41 @@ function toDate(string, format, timezone) {
 }
 
 /**
- * function checks if the string passed contains any characters that
- * are forbidden in URLs and tries to create a java.net.URL from it
- * FIXME: probably deprecated -> ringo.Url
+ * Checks if the string is a valid URL. Only HTTP, HTTPS and FTP are allowed protocols.
  * @param {String} string the string
- * @returns Boolean
+ * @returns {Boolean} true if the string is a valid URL
  */
 function isUrl(string) {
-    return URLPATTERN.test(string);
+    // uses java.util.regex.Pattern for performance reasons,
+    // pure JS / Rhino RegExp will not stop in feasible time!
+    return (URLPATTERN.matcher(string)).matches();
 }
 
 /**
- * function checks if the string passed contains any characters
- * that are forbidden in image- or filenames
+ * Checks if the string passed contains any characters
+ * that are forbidden in image- or filenames.
  * @param {String} string the string
- * @returns Boolean
+ * @returns {Boolean}
  */
 function isFileName(string) {
     return !FILEPATTERN.test(string);
 }
 
 /**
- * function cleans the string passed as argument from any characters
- * that are forbidden or shouldn't be used in filenames
+ * Cleans the string passed as argument from any characters
+ * that are forbidden or shouldn't be used in filenames.
  * @param {String} string the string
- * @returns Boolean
+ * @returns {String} the sanitized string
  */
 function toFileName(string) {
     return string.replace(new RegExp(FILEPATTERN.source, "g"), '');
 }
 
 /**
- * function checks a string for a valid color value in hexadecimal format.
- * it may also contain # as first character
+ * Checks a string for a valid color value in hexadecimal format.
+ * It may also contain # as first character.
  * @param {String} string the string
- * @returns Boolean false, if string length (without #) > 6 or < 6 or
+ * @returns {Boolean} false, if string length (without #) > 6 or < 6 or
  *              contains any character which is not a valid hex value
  */
 function isHexColor(string) {
@@ -147,11 +194,11 @@ function isHexColor(string) {
 }
 
 /**
- * converts a string into a hexadecimal color
- * representation (e.g. "ffcc33"). also knows how to
+ * Converts a string into a hexadecimal color
+ * representation (e.g. "ffcc33"). Also knows how to
  * convert a color string like "rgb (255, 204, 51)".
  * @param {String} string the string
- * @returns String the resulting hex color (w/o "#")
+ * @returns {String} the resulting hex color (w/o "#")
  */
 function toHexColor(string) {
     if (startsWith(string, "rgb")) {
@@ -170,36 +217,36 @@ function toHexColor(string) {
 }
 
 /**
- * function returns true if the string contains
- * only a-z and 0-9 (case insensitive!)
- * @returns Boolean true in case string is alpha, false otherwise
+ * Returns true if the string contains only a-z, A-Z and 0-9 (case insensitive).
+ * @param {String} string the string
+ * @returns {Boolean} true in case string is alpha, false otherwise
  */
 function isAlphanumeric(string) {
-    return string.length &&  !ANUMPATTERN.test(string);
+    return string.length && !ANUMPATTERN.test(string);
 }
 
 /**
- * function cleans a string by throwing away all
- * non-alphanumeric characters
- * @returns cleaned string
+ * Cleans a string by throwing away all non-alphanumeric characters.
+ * @param {String} string the string
+ * @returns {String} cleaned string
  */
 function toAlphanumeric(string) {
     return string.replace(new RegExp(ANUMPATTERN.source, "g"), '');
 }
 
 /**
- * function returns true if the string contains
- * only characters a-z
- * @returns Boolean true in case string is alpha, false otherwise
+ * Returns true if the string contains only characters a-z and A-Z.
+ * @param {String} string the string
+ * @returns {Boolean} true in case string is alpha, false otherwise
  */
 function isAlpha(string) {
     return string.length && !APATTERN.test(string);
 }
 
 /**
- * function returns true if the string contains
- * only 0-9
- * @returns Boolean true in case string is numeric, false otherwise
+ * Returns true if the string contains only 0-9.
+ * @param {String} string the string
+ * @returns {Boolean} true in case string is numeric, false otherwise
  */
 function isNumeric(string) {
     return string.length &&  !NUMPATTERN.test(string);
@@ -242,7 +289,7 @@ function toUnderscores(string) {
 }
 
 /**
- * transforms the first n characters of a string to uppercase
+ * Transforms the first n characters of a string to uppercase.
  * @param {String} the string to capitalize
  * @param {Number} amount of characters to transform
  * @returns {String} the resulting string
@@ -256,8 +303,8 @@ function capitalize(string, limit) {
 }
 
 /**
- * transforms the first n characters of each
- * word in a string to uppercase
+ * Transforms the first n characters of each
+ * word in a string to uppercase.
  * @param {String} string the string
  * @returns {String} the resulting string
  */
@@ -271,7 +318,7 @@ function titleize(string) {
 }
 
 /**
- * translates all characters of a string into HTML entitie
+ * Translates all characters of a string into HTML entities.
  * @param {String} string the string
  * @returns {String} translated result
  */
@@ -284,12 +331,12 @@ function entitize(string) {
 }
 
 /**
- * function inserts a string every number of characters
+ * Inserts a string every number of characterss
  * @param {String} string
  * @param {Number} interval number of characters after which insertion should take place
  * @param {String} string to be inserted
  * @param {Boolean} ignoreWhiteSpace definitely insert at each interval position
- * @returns String resulting string
+ * @returns {String} resulting string
  */
 function group(string, interval, str, ignoreWhiteSpace) {
     if (!interval || interval < 1)
@@ -309,10 +356,10 @@ function group(string, interval, str, ignoreWhiteSpace) {
 }
 
 /**
- * replace all linebreaks and optionally all w/br tags
+ * Replaces all linebreaks and optionally all w/br tags.
  * @param {Boolean} flag indicating if html tags should be replaced
  * @param {String} replacement for the linebreaks / html tags
- * @returns String the unwrapped string
+ * @returns {String} the unwrapped string
  */
 function unwrap(string, removeTags, replacement) {
     if (replacement == null)
@@ -322,7 +369,7 @@ function unwrap(string, removeTags, replacement) {
 }
 
 /**
- * function calculates a message digest of a string. If no
+ * Calculates a message digest of a string. If no
  * argument is passed, the MD5 algorithm is used.
  * @param {String} string the string to digest
  * @param {String} algorithm the name of the algorithm to use
@@ -335,7 +382,7 @@ function digest(string, algorithm) {
 }
 
 /**
- * function repeats a string passed as argument
+ * Repeats a string passed as argument multiple times.
  * @param {String} string the string
  * @param {Number} num amount of repetitions
  * @returns {String} resulting string
@@ -348,7 +395,7 @@ function repeat(string, num) {
 }
 
 /**
- * Returns true if string starts with the given substring
+ * Returns true if string starts with the given substring.
  * @param {String} string the string to search in
  * @param {String} substring pattern to search for
  * @returns {Boolean} true in case it matches the beginning
@@ -360,10 +407,10 @@ function startsWith(string, substring) {
 }
 
 /**
- * Returns true if string ends with the given substring
+ * Returns true if string ends with the given substring.
  * @param {String} string the string to search in
  * @param {String} substring pattern to search for
- * @returns Boolean true in case it matches the end of
+ * @returns {Boolean} true in case it matches the end of
  *            the string, false otherwise
  */
 function endsWith(string, substring) {
@@ -373,13 +420,13 @@ function endsWith(string, substring) {
 }
 
 /**
- * fills a string with another string up to a desired length
+ * Fills a string with another string up to a desired length.
  * @param {String} string the string
  * @param {String} fill the filling string
  * @param {Number} length the desired length of the resulting string
  * @param {Number} mode the direction which the string will be padded in:
  * a negative number means left, 0 means both, a positive number means right
- * @returns String the resulting string
+ * @returns {String} the resulting string
  */
 function pad(string, fill, length, mode) {
     if (typeof string !== "string") {
@@ -417,8 +464,7 @@ function pad(string, fill, length, mode) {
  * @param {String} string the string to search in
  * @param {String} substring the string to search for
  * @param {Number} fromIndex optional index to start searching
- * @returns true if str is contained in this string
- * @type Boolean
+ * @returns {Boolean} true if substring is contained in this string
  */
 function contains(string, substring, fromIndex) {
     fromIndex = fromIndex || 0;
@@ -427,7 +473,7 @@ function contains(string, substring, fromIndex) {
 
 /**
  * Get the longest common segment that two strings
- * have in common, starting at the beginning of the string
+ * have in common, starting at the beginning of the string.
  * @param {String} str1 a string
  * @param {String} str2 another string
  * @returns {String} the longest common segment
@@ -450,17 +496,19 @@ function getCommonPrefix(str1, str2) {
 }
 
 /**
- * returns true if the string looks like an e-mail
+ * Returns true if the string looks like an e-mail.
  * @param {String} string
+ * @returns {Boolean} true if the string is an e-mail address
  */
 function isEmail(string) {
     return EMAILPATTERN.test(string);
 }
 
 /**
- * returns the amount of occurences of one string in another
+ * Returns the amount of occurrences of one string in another.
  * @param {String} string
  * @param {String} pattern
+ * @returns {Number} occurrences
  */
 function count(string, pattern) {
         var count = 0;
@@ -473,11 +521,11 @@ function count(string, pattern) {
     }
 
 /**
- * Encode a string or binary to a Base64 encoded string
+ * Encode a string or binary to a Base64 encoded string.
  * @param {String|Binary} string a string or binary
  * @param {String} encoding optional encoding to use if
  *     first argument is a string. Defaults to 'utf8'.
- * @returns the Base64 encoded string
+ * @returns {String} the Base64 encoded string
  */
 function b64encode(string, encoding) {
     if (!base64) base64 = require('ringo/base64');
@@ -485,11 +533,35 @@ function b64encode(string, encoding) {
 }
 
 /**
+ * Encode a string or binary to a Y64 encoded string. Y64
+ * is an URL-safe Base64 encoding and prevents any URL escaping.
+ * It replaces the plus (<code>+</code>), slash (<code>/</code>)
+ * and equals (<code>=</code>) with dot (<code>.</code>),
+ * underscore (<code>_</code>) and dash (<code>-</code>).
+ *
+ * @param {String|Binary} string a string or binary
+ * @param {String} encoding optional encoding to use if
+ *     first argument is a string. Defaults to 'utf8'.
+ * @returns {String} the Y64 encoded string
+ * @see <a href="http://www.yuiblog.com/blog/2010/07/06/in-the-yui-3-gallery-base64-and-y64-encoding/">Detailed Y64 description</a>
+ */
+function y64encode(string, encoding) {
+   return b64encode(string, encoding).replace(/[\+\=\/]/g, function(toReplace){
+        switch(toReplace){
+            case '+': return '.';
+            case '=': return '-';
+            case '/': return '_';
+            default: throw "Invalid regex!";
+        }
+    });
+};
+
+/**
  * Decodes a Base64 encoded string to a string or byte array.
  * @param {String} string the Base64 encoded string
  * @param {String} encoding the encoding to use for the return value.
  *     Defaults to 'utf8'. Use 'raw' to get a ByteArray instead of a string.
- * @returns the decoded string or ByteArray
+ * @returns {String|ByteArray} the decoded string or ByteArray
  */
 function b64decode(string, encoding) {
     if (!base64) base64 = require('ringo/base64');
@@ -497,11 +569,29 @@ function b64decode(string, encoding) {
 }
 
 /**
- * Encode a string or binary to a Base16 encoded string
+ * Decodes a Y64 encoded string to a string or byte array.
+ * @param {String} string the Y64 encoded string
+ * @param {String} encoding the encoding to use for the return value.
+ *     Defaults to 'utf8'. Use 'raw' to get a ByteArray instead of a string.
+ * @returns {String|ByteArray} the decoded string or ByteArray
+ */
+function y64decode(string, encoding) {
+   return b64decode(string.replace(/[\.\-\_]/g, function(toReplace){
+        switch(toReplace){
+            case '.': return '+';
+            case '-': return '=';
+            case '_': return '/';
+            default: throw "Invalid regex!";
+        }
+    }), encoding);
+};
+
+/**
+ * Encode a string or binary to a Base16 encoded string.
  * @param {String|Binary} str a string or binary
  * @param {String} encoding optional encoding to use if
  *     first argument is a string. Defaults to 'utf8'.
- * @returns the Base16 encoded string
+ * @returns {String} the Base16 encoded string
  */
 function b16encode(str, encoding) {
     encoding = encoding || 'utf8';
@@ -523,7 +613,7 @@ function b16encode(str, encoding) {
  * @param {String} str the Base16 encoded string
  * @param {String} encoding the encoding to use for the return value.
  *     Defaults to 'utf8'. Use 'raw' to get a ByteArray instead of a string.
- * @returns the decoded string or ByteArray
+ * @returns {String|ByteArray} the decoded string or ByteArray
  */
 function b16decode(str, encoding) {
     var input = str instanceof Binary ? str : String(str).toByteString('ascii');
@@ -547,7 +637,7 @@ function b16decode(str, encoding) {
 }
 
 /**
- * Remove all potential HTML/XML tags from this string
+ * Remove all potential HTML/XML tags from this string.
  * @param {String} string the string
  * @return {String} the processed string
  */
@@ -580,7 +670,7 @@ function escapeRegExp(str) {
 }
 
 /**
- * factory to create functions for sorting objects in an array
+ * Factory to create functions for sorting objects in an array.
  * @param {String} field name of the field each object is compared with
  * @param {Number} order (ascending or descending)
  * @returns {Function} ready for use in Array.prototype.sort
@@ -600,7 +690,7 @@ function Sorter(field, order) {
 }
 
 /**
- * create a string from a bunch of substrings
+ * Create a string from a bunch of substrings.
  * @param {String} one or more strings as arguments
  * @returns {String} the resulting string
  */
@@ -609,12 +699,12 @@ function compose() {
 }
 
 /**
- * creates a random string (numbers and chars)
+ * Creates a random string (numbers and chars).
  * @param {Number} len length of key
  * @param {Number} mode determines which letters to use. null or 0 = all letters;
  *      1 = skip 0, 1, l and o which can easily be mixed with numbers;
  *      2 = use numbers only
- * @returns random string
+ * @returns {String} random string
  */
 function random(len, mode) {
     if (mode == 2) {
@@ -641,7 +731,7 @@ function random(len, mode) {
 }
 
 /**
- * append one string onto another and add some "glue"
+ * Append one string onto another and add some "glue"
  * if none of the strings is empty or null.
  * @param {String} the first string
  * @param {String} the string to be appended onto the first one
@@ -694,3 +784,39 @@ function format() {
         return format;
     }
 }
+
+/**
+ * Returns true if the string is uppercase.
+ * @param {String} string
+ * @returns {Boolean} true if uppercase, false otherwise
+ */
+function isUpperCase(string) {
+    return string.toUpperCase() === string;
+}
+
+/**
+ * Returns true if the string is lowercase.
+ * @param {String} string
+ * @returns {Boolean} true if lowercase, false otherwise
+ */
+function isLowerCase(string) {
+    return string.toLowerCase() === string;
+}
+
+/**
+ * Returns true if the string is an integer literal.
+ * @param {String} string
+ * @returns {Boolean} true if integer literal, false otherwise
+ */
+function isInt(string) {
+    return INT.test(string);
+};
+
+/**
+ * Returns true if the string is a floating point literal.
+ * @param {String} string
+ * @returns {Boolean} true if floating point literal, false otherwise
+ */
+function isFloat(string) {
+    return string !== '' && FLOAT.test(string) && !INT.test(string);
+};

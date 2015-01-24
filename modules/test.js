@@ -1,7 +1,36 @@
 /**
  * @fileOverview A test runner compliant to the
  * [CommonJS Unit Testing](http://wiki.commonjs.org/wiki/Unit_Testing/1.0)
- * specification.
+ * specification. It manages the execution of unit tests and processes test results.
+ * The runner reports the total number of failures as exit status code.
+ *
+ * The runner treats a module like a test case. A test case defines the fixture
+ * to run multiple tests. Test cases can provide optional <code>setUp()</code> and
+ * <code>tearDown()</code> functions to initialize and destroy the fixture. The
+ * test runner will run these methods prior to / after each test. Test functions
+ * must start with a <code>test</code> prefix in their name, otherwise they
+ * are skipped by the runner.
+ *
+ * The following example test case <code>testDatabase.js</code> starts a
+ * new test runner if executed with <code>ringo testDatabase.js</code>
+ *
+ * @example // testDatabase.js
+ * exports.setUp = function() { ... open db connection ... }
+ * exports.tearDown = function() { ... close db connection ... }
+ *
+ * // Test functions start with the prefix 'test'
+ * exports.testCreateTable = function() { ... }
+ * exports.testInsertData = function() { ... }
+ * exports.testTransactions = function() { ... }
+ * exports.testDeleteTable = function() { ... }
+ *
+ * if (require.main == module.id) {
+ *   // Get a runner and run on the current module
+ *   require("test").run(exports);
+ * }
+ *
+ * @see The <code><a href="../assert/index.html">assert</a></code> module is an
+ * assertion library to write unit tests.
  */
 
 var strings = require("ringo/utils/strings");
@@ -65,17 +94,23 @@ function jsDump(value, lvl) {
             return '<java:' + value.class.name + '>';
     }
 }
+/**
+ * @ignore
+ */
 jsDump.indent = function(lvl) {
     return strings.repeat("    ", lvl);
 };
+
+/**
+ * @ignore
+ */
 jsDump.quote = function(str) {
     return JSON.stringify(str.toString());
 };
 
 /**
- * Returns the type of the object passed as argument. This is
- * heavily inspired by http://philrathe.com/articles/equiv and
- * tlrobinson's narwhal test module (http://github.com/tlrobinson/narwhal/)
+ * Returns the type of the object passed as argument.
+ * @param {Object} obj
  * @returns The type of the object passed as argument
  * @type String
  */
@@ -260,7 +295,7 @@ function executeTest(scope, name, summary, writer, path) {
  * Constructs a new TermWriter instance
  * @class Instances of this class represent a writer for displaying test results
  * in the shell
- * @returns A newly created TermWriter instance
+ * @returns {TermWriter} A newly created TermWriter instance
  * @constructor
  */
 var TermWriter = function() {
@@ -283,7 +318,7 @@ TermWriter.prototype.writeHeader = function() {
 
 /**
  * Notification that we're entering a new test scope.
- * @param name the name of the test scope
+ * @param {String} name the name of the test scope
  */
 TermWriter.prototype.enterScope = function(name) {
     term.writeln(this.indent, "+ Running", name, "...");
@@ -292,9 +327,8 @@ TermWriter.prototype.enterScope = function(name) {
 
 /**
  * Notification that we're leaving a test scope.
- * @param name the name of the test scope
  */
-TermWriter.prototype.exitScope = function(name) {
+TermWriter.prototype.exitScope = function() {
     this.indent = this.indent.substring(2);
 };
 

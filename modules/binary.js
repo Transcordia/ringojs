@@ -1,24 +1,46 @@
 /**
- * @fileoverview <p>This module provides implementations of the Binary,
- * ByteArray, and ByteString classes as defined in the <a
+ * @fileoverview
+ * When dealing with network sockets or binary files, it’s necessary to read and
+ * write into byte streams. JavaScript itself does not provide a native representation
+ * of binary data, so this module provides two classes addressing this shortcoming.
+ * The implementation follows the <a
  * href="http://wiki.commonjs.org/wiki/Binary/B">CommonJS Binary/B</a>
  * proposal.
  *
- * <p>The JavaScript Binary class serves as common base class for ByteArray and
- * ByteString and can't be instantiated. ByteArray implements a modifiable and
- * resizable byte buffer, while ByteString implements an immutable byte
- * sequence. The ByteArray and ByteString constructors can take several
- * arguments. Have a look at the proposal for details.</p>
+ * <code>ByteArray</code> implements a modifiable and
+ * resizable byte buffer.
  *
- * <p>When passed to a Java method that expects a byte array, instances of
- * these class are automatically unwrapped. Use the {@link #unwrap()} method to
- * explicitly get the wrapped Java byte array.</p>
+ * <code>ByteString</code> implements an immutable byte
+ * sequence.
+ *
+ * Both classes share a common base class <code>Binary</code>. The base class
+ * can't be instantiated. It exists only to affirm that <code>ByteString</code>
+ * and <code>ByteArray</code> instances of <code>Binary</code>.
+ *
+ * When passed to a Java method that expects a <code>byte[]</code>, instances of
+ * these classes are automatically unwrapped.
+ *
+ * @example
+ * // raw network streams only accept Binary as input
+ * var stream = socket.getStream();
+ * stream.write(new ByteArray([0xFA, 0xF0, 0x10, 0x58, 0xFF]));
+ *
+ * // network protocols like HTTP/1.1 require ASCII
+ * const CRLF = new ByteString("\r\n", "ASCII");
+ * const EMPTY_LINE = new ByteString("\r\n\r\n", "ASCII");
+ *
+ * // saves a java.security.Key to a file;
+ * // the method getEncoded() returns a Java byte[]
+ * fs.write("id_dsa.pub", ByteArray.wrap(publicKey.getEncoded()));
+ *
+ * @see http://wiki.commonjs.org/wiki/Binary/B
  */
 
 defineClass(org.ringojs.wrappers.Binary);
 
 /**
- * Abstract base class for ByteArray and ByteString
+ * Abstract base class for ByteArray and ByteString. The Binary type exists only
+ * to affirm that ByteString and ByteArray instances of Binary.
  * @constructor
  */
 exports.Binary = Binary;
@@ -56,7 +78,7 @@ exports.ByteString = ByteString;
 /**
  * Converts the String to a mutable ByteArray using the specified encoding.
  * @param {String} charset the name of the string encoding. Defaults to 'UTF-8'
- * @returns a ByteArray representing the string
+ * @returns {ByteArray} a ByteArray representing the string
  */
 Object.defineProperty(String.prototype, 'toByteArray', {
     value: function(charset) {
@@ -68,7 +90,7 @@ Object.defineProperty(String.prototype, 'toByteArray', {
 /**
  * Converts the String to an immutable ByteString using the specified encoding.
  * @param {String} charset the name of the string encoding. Defaults to 'UTF-8'
- * @returns a ByteArray representing the string
+ * @returns {ByteArray} a ByteArray representing the string
  */
 Object.defineProperty(String.prototype, 'toByteString', {
     value: function(charset) {
@@ -211,7 +233,7 @@ Object.defineProperty(ByteArray.prototype, 'pop', {
 
 /**
  * Appends the given elements and returns the new length of the array.
- * @param {Number} num... one or more numbers to append
+ * @param {Number...} num... one or more numbers to append
  * @returns {Number} the new length of the ByteArray
  */
 Object.defineProperty(ByteArray.prototype, 'push', {
@@ -234,7 +256,7 @@ Object.defineProperty(ByteArray.prototype, 'shift', {
 /**
  * Adds one or more elements to the beginning of the ByteArray and returns its
  * new length.
- * @param {Number} num... one or more numbers to append
+ * @param {Number...} num... one or more numbers to append
  * @returns {Number} the new length of the ByteArray
  */
 Object.defineProperty(ByteArray.prototype, 'unshift', {
@@ -249,13 +271,37 @@ Object.defineProperty(ByteArray.prototype, 'unshift', {
  * @param {Number} index the index at which to start changing the ByteArray
  * @param {Number} howMany The number of elements to remove at the given
  *        position
- * @param {Number} elements... the new elements to add at the given position
+ * @param {Number...} elements... the new elements to add at the given position
  */
 Object.defineProperty(ByteArray.prototype, 'splice', {
     value: function() {
         return new ByteArray(Array.prototype.splice.apply(this, arguments));
     }, writable: true
 });
+
+/**
+ * Returns the byte at the given offset as ByteArray.
+ * @name ByteArray.prototype.byteAt
+ * @param {Number} offset
+ * @returns {ByteArray}
+ * @function
+ */
+
+/**
+ * Returns the byte at the given offset as ByteArray.
+ * @name ByteArray.prototype.charAt
+ * @param {Number} offset
+ * @returns {ByteArray}
+ * @function
+ */
+
+/**
+ * Returns charcode at the given offset.
+ * @name ByteArray.prototype.charCodeAt
+ * @param {Number} offset
+ * @returns {Number}
+ * @function
+ */
 
 /**
  * Copy a range of bytes between start and stop from this object to another
@@ -294,7 +340,7 @@ Object.defineProperty(ByteArray.prototype, 'splice', {
 /**
  * Returns a ByteArray composed of itself concatenated with the given
  * ByteString, ByteArray, and Array values.
- * @param {Binary|Array} arg... one or more elements to concatenate
+ * @param {Binary...|Array...} args... one or more elements to concatenate
  * @returns {ByteArray} a new ByteArray
  * @name ByteArray.prototype.concat
  * @function
@@ -381,11 +427,63 @@ Object.defineProperty(ByteArray.prototype, 'splice', {
  * @since 0.5
  */
 
+ /**
+ * Unwraps the underlying Java <code>byte[]</code> from ByteArray. It can be
+ * passed to a Java method that expects a byte array.
+ * @name ByteArray.prototype.unwrap
+ * @returns {byte[]} a native Java byte array
+ * @function
+ * @since 0.5
+ */
+
+/**
+ * Sets the byte at the given offset. <code>set(offset, value)</code> is
+ * analogous to indexing with brackets <code>&#91;offset&#93;=value</code>.
+ * @name ByteArray.prototype.set
+ * @param {Number} offset
+ * @param {Number} value
+ * @function
+ * @example var ba = new ByteArray([0,255]);
+ * ba[0] = 64;
+ * print(ba[0]); // prints 64
+ */
+
+/**
+ * Returns the byte at the given offset as integer. <code>get(offset)</code> is
+ * analogous to indexing with brackets <code>&#91;offset&#93;</code>.
+ * @name ByteArray.prototype.get
+ * @param {Number} offset
+ * @returns {Number}
+ * @function
+ * @example var ba = new ByteArray([0,255]);
+ * print(ba[0]); // prints 0
+ */
+
+/**
+ * Create a ByteString wrapper for a Java byte array without creating a new copy
+ * as the ByteString constructor does.
+ * @name ByteString.wrap
+ * @param {Binary} bytes a Java byte array or Binary instance
+ * @returns {ByteString} a ByteString wrapping the argument
+ * @function
+ * @since 0.5
+ */
+
+/**
+ * Unwraps the underlying Java <code>byte[]</code> from ByteString. It can be
+ * passed to a Java method that expects a byte array.
+ * @name ByteString.prototype.unwrap
+ * @returns {byte[]} a native Java byte array
+ * @function
+ * @since 0.5
+ */
+
 /**
  * Returns a byte for byte copy of this immutable ByteString as a mutable
  * ByteArray.
  * @name ByteString.prototype.toByteArray
  * @function
+ * @returns {ByteArray}
  */
 
 /**
@@ -441,8 +539,24 @@ Object.defineProperty(ByteArray.prototype, 'splice', {
  */
 
 /**
- * Returns the byte at the given offset.
+ * Returns the byte at the given offset as ByteString.
  * @name ByteString.prototype.byteAt
+ * @param {Number} offset
+ * @returns {ByteString}
+ * @function
+ */
+
+/**
+ * Returns the byte at the given offset as ByteString.
+ * @name ByteString.prototype.charAt
+ * @param {Number} offset
+ * @returns {ByteString}
+ * @function
+ */
+
+ /**
+ * Returns charcode at the given offset.
+ * @name ByteString.prototype.charCodeAt
  * @param {Number} offset
  * @returns {Number}
  * @function
@@ -450,7 +564,7 @@ Object.defineProperty(ByteArray.prototype, 'splice', {
 
 /**
  * Returns the byte at the given offset as a ByteString. `get(offset)` is
- * analogous to indexing with brackets (`[offset]`).
+ * analogous to indexing with brackets &#91;offset&#93;.
  * @name ByteString.prototype.get
  * @param {Number} offset
  * @returns {ByteString}
@@ -500,8 +614,15 @@ Object.defineProperty(ByteArray.prototype, 'splice', {
 /**
  * Returns a ByteString composed of itself concatenated with the given
  * ByteString, ByteArray, and Array values.
- * @param {Binary|Array} arg... one or more elements to concatenate
+ * @param {Binary...|Array...} args... one or more elements to concatenate
  * @returns {ByteString} a new ByteString
  * @name ByteString.prototype.concat
  * @function
+ */
+
+/**
+ * The length in bytes. This property is read-only. Setting it to a value
+ * silently fails.
+ * @type Number
+ * @name ByteString.prototype.length
  */

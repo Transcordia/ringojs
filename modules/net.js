@@ -1,6 +1,34 @@
 /**
  * @fileoverview This module provides support for networking using
- * TCP and UDP sockets.
+ * TCP and UDP sockets. A socket represents a connection between a
+ * client and a server program over a network. The underlying native
+ * binding is provided by the `java.net` package.
+ *
+ * @example // A simple TCP server
+ * var io = require('io');
+ * var net = require('net');
+ *
+ * var server = new net.ServerSocket();
+ * server.bind('127.0.0.1', 6789);
+ *
+ * var socket = server.accept();
+ * var stream = new io.TextStream(socket.getStream(), {
+ *   'charset': 'US-ASCII'
+ *});
+ *
+ * var line;
+ * do {
+ *   // Read one line from the client
+ *   line = stream.readLine();
+ *   console.log(line);
+ *
+ *   // Write back to the client
+ *   stream.writeLine("Received: " + line);
+ *} while (line.indexOf("END") < 0);
+ *
+ * stream.close();
+ * socket.close();
+ * server.close();
  */
 
 var io = require('io');
@@ -60,7 +88,7 @@ function Socket() {
     };
 
     /**
-     * Get the [I/O stream][io#Stream] for this socket.
+     * Get the [I/O stream](../io#Stream) for this socket.
      * @return {Stream} a binary stream
      * @see io#Stream
      */
@@ -258,7 +286,7 @@ function DatagramSocket() {
     /**
      * Receive a datagram packet from this socket. This method does not return
      * the sender's IP address, so it is meant to be in conjunction with
-     * [connect()][#DatagramSocket.prototype.connect].
+     * [connect()](#DatagramSocket.prototype.connect).
      * @param {Number} length the maximum number of bytes to receive
      * @param {ByteArray} buffer optional buffer to store bytes in
      * @return {ByteArray} the received data
@@ -296,7 +324,7 @@ function DatagramSocket() {
     /**
      * Send a datagram packet from this socket. This method does not allow
      * the specify the recipient's IP address, so it is meant to be in
-     * conjunction with [connect()][#DatagramSocket.prototype.connect].
+     * conjunction with [connect()](#DatagramSocket.prototype.connect).
      * @param {Binary} data the data to send
      */
     this.send = function(data) {
@@ -379,7 +407,7 @@ function ServerSocket() {
 
     /**
      * Listens for a connection to be made to this socket and returns a new
-     * [Socket][#Socket] object. The method blocks until a connection is made.
+     * [Socket](#Socket) object. The method blocks until a connection is made.
      * @return {Socket} a newly connected socket object
      */
     this.accept = function() {

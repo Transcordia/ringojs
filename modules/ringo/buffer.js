@@ -10,7 +10,7 @@ export('Buffer');
 /**
  * A Buffer class for composing strings. This is implemented
  * as a simple wrapper around a JavaScript array.
- * @param ... initial parts to write to the buffer
+ * @param {*...} args... initial parts to write to the buffer
  */
 function Buffer() {
 
@@ -19,7 +19,7 @@ function Buffer() {
 
     /**
      * Reset the buffer discarding all its content.
-     * @returns this buffer object
+     * @returns {Buffer} this buffer object
      */
     this.reset = function() {
         content = [];
@@ -29,8 +29,8 @@ function Buffer() {
 
     /**
      * Append all arguments to this buffer.
-     * @param ... variable arguments to append to the buffer
-     * @returns this buffer object
+     * @param {*...} args... variable arguments to append to the buffer
+     * @returns {Buffer} this buffer object
      */
     this.write = function() {
         for (var i = 0; i < arguments.length; i++) {
@@ -43,8 +43,8 @@ function Buffer() {
 
     /**
      * Append all arguments to this buffer terminated by a carriage return/newline sequence.
-     * @param ... variable arguments to append to the buffer
-     * @returns this buffer object
+     * @param {*...} args... variable arguments to append to the buffer
+     * @returns {Buffer} this buffer object
      */
     this.writeln = function() {
         this.write.apply(this, arguments);
@@ -55,6 +55,7 @@ function Buffer() {
 
     /**
      * Return the content of this buffer as string.
+     * @returns {String} the buffer as string
      */
     this.toString = function() {
         return content.join('');
@@ -62,7 +63,7 @@ function Buffer() {
 
     /**
      * Call function <code>fn</code> with each content part in this buffer.
-     * @param fn a function to apply to each buffer part
+     * @param {Function} fn a function to apply to each buffer part
      */
     this.forEach = function(fn) {
         content.forEach(fn);
@@ -75,10 +76,11 @@ function Buffer() {
     Object.defineProperty(this, "length", {
         get: function() { return length; }
     });
-    
+
     /**
      * Get a message digest on the content of this buffer.
-     * @param algorithm the algorithm to use, defaults to MD5
+     * @param {String} algorithm the algorithm to use, defaults to MD5
+     * @returns {String} a Base16 encoded digest
      */
     this.digest = function(algorithm) {
         var md = java.security.MessageDigest.getInstance(algorithm || "MD5");

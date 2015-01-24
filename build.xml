@@ -12,6 +12,7 @@
         <echo message=" test       --> run JUnit and RingoJS tests"/>
         <echo message=" test-dates --> runs ringo/utils/dates test in different timezones"/>
         <echo message=" docs       --> generates the API docs"/>
+        <echo message=" jsdocs     --> generates only the JS module API docs"/>
         <echo message=" package    --> creates RingoJS distribution"/>
         <echo message=" dpkg       --> creates RingoJS debian package"/>
         <echo message=" clean      --> clean up compiled resources"/>
@@ -22,7 +23,7 @@
     <!-- =================================================================== -->
     <target name="init">
         <property name="project" value="ringojs"/>
-        <property name="version" value="0.10.1-SNAPSHOT"/>
+        <property name="version" value="0.11"/>
 
         <property name="home" value="."/>
 
@@ -60,6 +61,9 @@
             pattern="${ivy.lib.dir}/ivy/[originalname].[ext]"/>
         <get src="https://oss.sonatype.org/content/repositories/snapshots/org/mozilla/rhino/1.7R5-SNAPSHOT/rhino-1.7R5-20120629.144839-4.jar"
              dest="lib/ivy/rhino-1.7R5-SNAPSHOT.jar" usetimestamp="true"/>
+         <get src="http://central.maven.org/maven2/org/eclipse/jetty/orbit/javax.servlet/3.0.0.v201112011016/javax.servlet-3.0.0.v201112011016.jar"
+             dest="lib/ivy/javax.servlet-3.0.0.v201112011016.jar" usetimestamp="true"/>
+
     </target>
 
     <!-- =================================================================== -->
@@ -256,27 +260,59 @@
     </target>
 
     <!-- =================================================================== -->
+    <!-- Creates only the JS modules API documentation                       -->
+    <!-- =================================================================== -->
+    <target name="jsdocs" depends="jar">
+        <delete dir="${jsdocs}"/>
+        <mkdir dir="${jsdocs}"/>
+        <java jar="run.jar" fork="true">
+            <arg value="${home}/tools/jsdoc/main.js"/>
+            <arg  value="--file-urls"/>
+            <arg  value="--source=${home}/modules"/>
+            <arg  value="--directory=${jsdocs}"/>
+            <arg  value="--name=Ringo Modules"/>
+        </java>
+    </target>
+
+    <!-- =================================================================== -->
+    <!-- Checks if /packages is empty to prevent shipping its content        -->
+    <!-- =================================================================== -->
+    <target name="packages-empty" depends="init">
+        <fail message="/packages is not empty, but needs to be for a packaged build!">
+            <condition>
+                <resourcecount when="greater" count="0">
+                    <dirset dir="${home}/packages/" includes="*" />
+                </resourcecount>
+            </condition>
+        </fail>
+    </target>
+
+    <!-- =================================================================== -->
     <!-- Create zipped files for distribution                                -->
     <!-- =================================================================== -->
-    <target name="package" depends="jar,docs,test">
+    <target name="package" depends="packages-empty,jar,docs,test">
+        <!-- These files need chmod 755 -->
+        <property name="package-binaries" value="bin/ringo,bin/ringo-admin,bin/ringo-web,bin/ringo-doc"/>
+        <property name="package-excludes" value="bin/ringo,bin/ringo-admin,bin/ringo-web,bin/ringo-doc,bin/rp,build/**,*.zip,*.o,*.tar,*.tar.gz,.*/**,bin/rp" />
+
         <zip zipfile="../${project}-${version}.zip">
-            <zipfileset dir="${home}" prefix="${project}-${version}"
-             excludes="build/**,*.zip,*.o,*.tar,*.tar.gz,.*/**" />
+            <zipfileset dir="${home}" prefix="${project}-${version}" filemode="755" includes="${package-binaries}" />
+            <zipfileset dir="${home}" prefix="${project}-${version}" excludes="${package-excludes}" />
         </zip>
+
         <tar tarfile="../${project}-${version}.tar">
-            <tarfileset dir="${home}" prefix="${project}-${version}"
-             filemode="755" includes="bin/ringo,bin/ringo-admin,bin/ringo-web,bin/narwhal" />
-            <tarfileset dir="${home}" prefix="${project}-${version}"
-             excludes="bin/ringo,bin/ringo-admin,bin/ringo-web,bin/narwhal,build/**,*.zip,*.o,*.tar,*.tar.gz,.*/**" />
+            <tarfileset dir="${home}" prefix="${project}-${version}" filemode="755" includes="${package-binaries}" />
+            <tarfileset dir="${home}" prefix="${project}-${version}" excludes="${package-excludes}" />
         </tar>
         <gzip src="../${project}-${version}.tar" destfile="../${project}-${version}.tar.gz"/>
         <delete file="../${project}-${version}.tar"/>
+
     </target>
 
     <!-- =================================================================== -->
     <!-- Create a debian package                                             -->
     <!-- =================================================================== -->
-    <target name="dpkg">
+    <target name="dpkg" depends="packages-empty">
         <exec executable="dpkg-buildpackage">
             <arg value="-rfakeroot"/>
             <arg value="-b"/>

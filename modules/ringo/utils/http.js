@@ -1,3 +1,6 @@
+/**
+ * @fileoverview Provides utility functions to work with HTTP requests and responses.
+ */
 
 var dates = require('ringo/utils/dates');
 var strings = require('ringo/utils/strings');
@@ -61,7 +64,7 @@ function Headers(headers) {
     /**
      * Get the value of the header with the given name
      * @param {String} name the header name
-     * @returns the header value
+     * @returns {String} the header value
      * @name Headers.instance.get
      */
     Object.defineProperty(headers, "get", {
@@ -234,10 +237,6 @@ function urlEncode(object) {
  * To delete a cookie immediately, set the days argument to 0. If days is
  * undefined or negative, the cookie is set for the current browser session.
  *
- * @example <pre>setCookie("username", "michi");
- * setCookie("password", "strenggeheim", 10,
- * {path: "/mypath", domain: ".mydomain.org"});</pre>
- *
  * @param {String} key the cookie name
  * @param {String} value the cookie value
  * @param {Number} days optional the number of days to keep the cookie.
@@ -250,6 +249,9 @@ function urlEncode(object) {
  * <li>httpOnly - to make the cookie inaccessible to client side scripts</li></ul>
  * @since 0.8
  * @return {String} the Set-Cookie header value
+ * @example setCookie("username", "michi");
+ * setCookie("password", "strenggeheim", 10,
+ * {path: "/mypath", domain: ".mydomain.org"});
  */
 function setCookie(key, value, days, options) {
     if (value) {
@@ -303,7 +305,7 @@ var EMPTY_LINE = new ByteString("\r\n\r\n", "ASCII");
 /**
  * Find out whether the content type denotes a format this module can parse.
  * @param {String} contentType a HTTP request Content-Type header
- * @returns true if the content type can be parsed as form data by this module
+ * @returns {Boolean} true if the content type can be parsed as form data by this module
  */
 function isUrlEncoded(contentType) {
     return contentType && strings.startsWith(
@@ -313,7 +315,7 @@ function isUrlEncoded(contentType) {
 /**
  * Find out whether the content type denotes a format this module can parse.
  * @param {String} contentType a HTTP request Content-Type header
- * @return true if the content type can be parsed as form data by this module
+ * @return {Boolean} true if the content type can be parsed as form data by this module
  */
 function isFileUpload(contentType) {
     return contentType && strings.startsWith(
@@ -329,7 +331,7 @@ function isFileUpload(contentType) {
  * @param {Object} params optional parameter object to parse into. If undefined
  *        a new object is created and returned.
  * @param {String} encoding a valid encoding name, defaults to UTF-8
- * @returns the parsed parameter object
+ * @returns {Object} the parsed parameter object
  */
 function parseParameters(input, params, encoding) {
     if (!input) {
@@ -443,9 +445,9 @@ function convertHexDigit(byte) {
  * @param {Object} request the JSGI request object
  * @param {Object} params the parameter object to parse into. If not defined
  *        a new object is created and returned.
- * @param {string} encoding optional encoding to apply to non-file parameters.
+ * @param {String} encoding optional encoding to apply to non-file parameters.
  *        Defaults to "UTF-8".
- * @param {function} streamFactory factory function to create streams for mime parts
+ * @param {Function} streamFactory factory function to create streams for mime parts
  * @returns {Object} the parsed parameter object
  */
 function parseFileUpload(request, params, encoding, streamFactory) {

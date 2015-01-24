@@ -797,5 +797,5 @@ exports.testToISOString = function() {
 };
 
 if (require.main == module.id) {
-    require("test").run(exports);
+    require('system').exit(require("test").run(module.id));
 }

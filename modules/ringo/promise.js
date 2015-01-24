@@ -10,8 +10,8 @@ var FAILED = 2;
 
 /**
  * Creates an object representing a deferred value.
- * The deferred object has two properties: a [promise][#Promise]
- * object and a [resolve()][#Deferred.prototype.resolve] function.
+ * The deferred object has two properties: a [promise](#Promise)
+ * object and a [resolve()](#Deferred.prototype.resolve) function.
  *
  * The promise object can be used to [register a callback](#Promise.prototype.then)
  * to be invoked when the promise is eventually resolved.
@@ -43,8 +43,8 @@ function Deferred() {
      * Resolve the promise.
      * @name Deferred.prototype.resolve
      * @param {Object} result the result or error value
-     * @param {boolean} isError if true the promise is resolved as failed
-     * @type function
+     * @param {Boolean} isError if true the promise is resolved as failed
+     * @type Function
      */
     var resolve = sync(function(result, isError) {
         if (state !== NEW) {
@@ -92,8 +92,8 @@ function Deferred() {
          * Register callback and errback functions to be invoked when
          * the promise is resolved.
          * @name Promise.prototype.then
-         * @param {function} callback called if the promise is resolved as fulfilled
-         * @param {function} errback called if the promise is resolved as failed
+         * @param {Function} callback called if the promise is resolved as fulfilled
+         * @param {Function} errback called if the promise is resolved as failed
          * @return {Object} a new promise that resolves to the return value of the
          *     callback or errback when it is called.
          */
@@ -155,7 +155,7 @@ function Deferred() {
  * promises resolve to an error. It is the responsibility of the handler
  * function to check each individual promise result.
  *
- * @param {promise} promise... any number of promise arguments.
+ * @param {Promise...} promise... any number of promise arguments.
  * @constructor
  */
 function PromiseList(args) {
@@ -190,6 +190,6 @@ function PromiseList(args) {
 
 /**
  * A promise object. This class is not exported, create a
- * [deferred object][#Deferred] to create a promise.
+ * [deferred object](#Deferred) to create a promise.
  * @name Promise
  */

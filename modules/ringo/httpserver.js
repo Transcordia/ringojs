@@ -20,14 +20,23 @@ var options,
  *
  * @param {Object} options A javascript object with any of the following
  * properties (default values in parentheses):
+ *
  * <ul>
  * <li>jettyConfig ('config/jetty.xml')</li>
  * <li>port (8080)</li>
  * <li>host (undefined)</li>
+ * <li>sessions (true)</li>
+ * <li>security (true)</li>
+ * <li>cookieName (null)</li>
+ * <li>cookieDomain (null)</li>
+ * <li>cookiePath (null)</li>
+ * <li>httpOnlyCookies (false)</li>
+ * <li>secureCookies (false)</li>
  * </ul>
  *
  * For convenience, the constructor supports the definition of a JSGI application
  * and static resource mapping in the options object using the following properties:
+ *
  * <ul>
  * <li>virtualHost (undefined)</li>
  * <li>mountpoint ('/')</li>
@@ -50,28 +59,33 @@ function Server(options) {
     var xmlconfig;
 
     /**
-     * Get the server's default [context][#Context]. The default context is the
+     * Get the server's default [context](#Context). The default context is the
      * context that is created when the server is created.
      * @see #Context
      * @since: 0.6
-     * @returns the default Context
+     * @returns {Context} the default Context
      */
     this.getDefaultContext = function() {
         return defaultContext;
     };
 
     /**
-     * Get a servlet application [context][#Context] for the given path and
+     * Get a servlet application [context](#Context) for the given path and
      * virtual hosts, creating it if it doesn't exist.
-     * @param {string} path the context root path such as "/" or "/app"
-     * @param {string|array} virtualHosts optional single or multiple virtual host names.
+     * @param {String} path the context root path such as "/" or "/app"
+     * @param {String|Array} virtualHosts optional single or multiple virtual host names.
      *   A virtual host may start with a "*." wildcard.
      * @param {Object} options may have the following properties:
      *   sessions: true to enable sessions for this context, false otherwise
      *   security: true to enable security for this context, false otherwise
+     *   cookieName: optional cookie name
+     *   cookieDomain: optional cookie domain
+     *   cookiePath: optional cookie path
+     *   httpOnlyCookies: true to enable http-only session cookies
+     *   secureCookies: true to enable secure session cookies
      * @see #Context
      * @since: 0.6
-     * @returns a Context object
+     * @returns {Context} a Context object
      */
     this.getContext = function(path, virtualHosts, options) {
         var idMap = xmlconfig.getIdMap();
@@ -85,6 +99,17 @@ function Server(options) {
             cx = new org.eclipse.jetty.servlet.ServletContextHandler(contexts, path, sessions, security);
             if (virtualHosts) {
                 cx.setVirtualHosts(Array.isArray(virtualHosts) ? virtualHosts : [String(virtualHosts)]);
+            }
+            var sessionHandler = cx.getSessionHandler();
+            if (sessionHandler != null) {
+                var sessionCookieConfig = sessionHandler.getSessionManager().getSessionCookieConfig();
+                sessionCookieConfig.setHttpOnly(options.httpOnlyCookies);
+                sessionCookieConfig.setSecure(options.secureCookies);
+                if (typeof(options.cookieName) === "string") {
+                    sessionCookieConfig.setName(options.cookieName);
+                }
+                sessionCookieConfig.setDomain(options.cookieDomain);
+                sessionCookieConfig.setPath(options.cookiePath);
             }
             contextMap[contextKey] = cx;
             if (jetty.isRunning()) {
@@ -101,8 +126,14 @@ function Server(options) {
          */
         return {
             /**
+             * Returns the wrapped servlet context handler
+             */
+            getHandler: function() {
+                return cx;
+            },
+            /**
              * Map this context to a JSGI application.
-             * @param {function|object} app a JSGI application, either as a function
+             * @param {Function|Object} app a JSGI application, either as a function
              *   or an object with properties <code>appModule</code> and
              *   <code>appName</code> defining the application.
              *   <div><code>{ appModule: 'main', appName: 'app' }</code></div>
@@ -128,7 +159,7 @@ function Server(options) {
             },
             /**
              * Map this context to a directory containing static resources.
-             * @param {string} dir the directory from which to serve static resources
+             * @param {String} dir the directory from which to serve static resources
              * @since: 0.6
              * @name Context.instance.serveStatic
              */
@@ -142,7 +173,7 @@ function Server(options) {
             },
             /**
              * Map a request path within this context to the given servlet.
-             * @param {string} servletPath the servlet path
+             * @param {String} servletPath the servlet path
              * @param {Servlet} servlet a java object implementing the
              *     javax.servlet.Servlet interface.
              * @param {Object} initParams optional object containing servlet
@@ -285,7 +316,7 @@ function Server(options) {
 
     /**
      * Checks whether this server is currently running.
-     * @returns true if the server is running, false otherwise.
+     * @returns {Boolean} true if the server is running, false otherwise.
      */
     this.isRunning = function() {
         return jetty && jetty.isRunning();
@@ -293,7 +324,7 @@ function Server(options) {
 
     /**
      * Get the Jetty server instance
-     * @returns the Jetty Server instance
+     * @returns {org.eclipse.jetty.server.Server} the Jetty Server instance
      */
     this.getJetty = function() {
         return jetty;
@@ -319,8 +350,13 @@ function Server(options) {
 
     // create default context
     defaultContext = this.getContext(options.mountpoint || "/", options.virtualHost, {
-        security: true,
-        sessions: true
+        security: options.security !== false,
+        sessions: options.sessions !== false,
+        cookieName: options.cookieName || null,
+        cookieDomain: options.cookieDomain || null,
+        cookiePath: options.cookiePath || null,
+        httpOnlyCookies: options.httpOnlyCookies === true,
+        secureCookies: options.secureCookies === true
     });
 
     // If options defines an application mount it
@@ -390,7 +426,7 @@ function parseOptions(args, defaults) {
  * the application at `appPath`. If the application exports a function called
  * `init`, it will be invoked with the new server as argument.
  *
- * @param appPath {string} optional application file name or module id.
+ * @param {String} appPath optional application file name or module id.
  *     If undefined, the first command line argument will be used as application.
  *     If there are no command line arguments, module `main` in the current
  *     working directory is used.
