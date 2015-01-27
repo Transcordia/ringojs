@@ -167,7 +167,7 @@
         </dependency>
 
         <dependency>
-            <groupId>org.mozilla</groupId>
+            <groupId>io.ejs</groupId>
             <artifactId>rhino</artifactId>
             <version>${rhino-version}</version>
         </dependency>
