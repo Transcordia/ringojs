@@ -1,26 +1,91 @@
-var assert = require('assert');
-var subprocess = require('ringo/subprocess');
-var fs = require('fs');
-var engine = require('ringo/engine');
+var assert = require("assert");
+var subprocess = require("ringo/subprocess");
 
-const RINGO_HOME = engine.getRingoHome().getPath();
+var OS_NAME = java.lang.System.getProperty("os.name").toLowerCase();
+var BASH = (function() {
+    return ["linux", "mac os", "solaris", "hp-ux"].some(function(candidate) {
+        return OS_NAME.indexOf(candidate) >= 0;
+    });
+})();
 
-function isWindows() /win/i.test(engine.properties['os.name']);
+var CMD = (function() {
+    return OS_NAME.indexOf("windows") >= 0;
+})();
 
-exports.testCwdSensibleness = function () {
-    fs.changeWorkingDirectory(RINGO_HOME);
+if (CMD === BASH === true) {
+    throw new Error("Windows and Linux / Unix detected at the same time!");
+}
 
-    var cmd = isWindows() ? 'cmd /c cd' : '/bin/pwd';
-    var out = subprocess.command(cmd)
-            .replace(/\n/, '')
-            .replace(/\\/g, '/');
-    var pwd = /\/$/.test(out) ? out : out + '/';
+var bashTests = {
+    testCommand: function() {
+        var path = subprocess.command("/bin/bash", "-c", "echo $PATH");
+        assert.isTrue(path.indexOf("/bin") >= 0);
+    },
+    testStatus: function() {
+        var status = subprocess.status("/bin/bash", "-c", "echo $PATH");
+        assert.isTrue(status == 0);
+    },
+    testSystem: function() {
+        var oldOut = java.lang.System.out;
+        var baos = new java.io.ByteArrayOutputStream(1024);
+        var ps = new java.io.PrintStream(baos);
+        java.lang.System.setOut(ps);
 
-    assert.strictEqual(fs.workingDirectory(), RINGO_HOME);
-    assert.strictEqual(pwd, isWindows() ?
-            RINGO_HOME.replace(/\\/g, '/') : RINGO_HOME);
+        var status = -1;
+        try {
+            status = subprocess.system("/bin/bash", "-c", "echo $PATH");
+        } finally {
+            java.lang.System.setOut(oldOut);
+        }
+
+        var cs = java.nio.charset.Charset.defaultCharset();
+        var path = baos.toString(cs.name());
+
+        assert.isTrue(path.indexOf("/bin") >= 0);
+        assert.isTrue(status == 0);
+    }
 };
 
-if (require.main == module.id) {
+var cmdTests = {
+    testCommand: function() {
+        var path = subprocess.command("cmd", "/C", "ver");
+        assert.isTrue(path.indexOf("Microsoft Windows") >= 0);
+    },
+    testStatus: function() {
+        var status = subprocess.status("cmd", "/C", "ver");
+        assert.isTrue(status == 0);
+    },
+    testSystem: function() {
+        var oldOut = java.lang.System.out;
+        var baos = new java.io.ByteArrayOutputStream(1024);
+        var ps = new java.io.PrintStream(baos);
+        java.lang.System.setOut(ps);
+
+        var status = -1;
+        try {
+            status = subprocess.system("cmd", "/C", "ver");
+        } finally {
+            java.lang.System.setOut(oldOut);
+        }
+
+        var cs = java.nio.charset.Charset.defaultCharset();
+        var path = baos.toString(cs.name());
+
+        assert.isTrue(path.indexOf("Microsoft Windows") >= 0);
+        assert.isTrue(status == 0);
+    }
+};
+
+if (BASH === true) {
+    for (var testName in bashTests) {
+        exports[testName] = bashTests[testName];
+    }
+} else if (CMD  === true) {
+    for (var testName in cmdTests) {
+        exports[testName] = cmdTests[testName];
+    }
+}
+
+if (require.main === module) {
     require('system').exit(require("test").run(module.id));
 }

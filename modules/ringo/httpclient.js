@@ -26,6 +26,7 @@ var objects = require("ringo/utils/objects");
 var base64 = require("ringo/base64");
 var {Buffer} = require("ringo/buffer");
 var {Random} = java.util;
+var log = require("ringo/logging").getLogger(module.id);
 
 export("request", "get", "post", "put", "del", "TextPart", "BinaryPart");
 
@@ -44,9 +45,10 @@ var prepareOptions = function(options) {
         "username": undefined,
         "password": undefined,
         "followRedirects": true,
-        "readTimeout": 0,
-        "connectTimeout": 0,
-        "binary": false
+        "readTimeout": 30000,
+        "connectTimeout": 60000,
+        "binary": false,
+        "beforeSend": null
     };
     var opts = options ? objects.merge(options, defaultValues) : defaultValues;
     Headers(opts.headers);
@@ -54,63 +56,6 @@ var prepareOptions = function(options) {
             || opts.headers.get("Content-Type")
             || "application/x-www-form-urlencoded;charset=utf-8";
     return opts;
-};
-
-/**
- * Of the 4 arguments to get/post all but the first (url) are optional.
- * This fn puts the right arguments - depending on their type - into the options object
- * which can be used to call request().
- * @param {Array} Arguments Array
- * @returns Object holding attributes for call to request()
- * @type Object<url, data, success, error>
- */
-var extractOptionalArguments = function(args) {
-
-    var types = [];
-    for each (var arg in args) {
-        types.push(typeof(arg));
-    }
-
-    if (types[0] != 'string') {
-        throw new Error('first argument (url) must be string');
-    }
-
-    if (args.length == 1) {
-        return {
-            url: args[0]
-        };
-
-    } else if (args.length == 2) {
-        if (types[1] == 'function') {
-            return {
-                url: args[0],
-                success: args[1]
-            };
-        } else {
-            return {
-                url: args[0],
-                data: args[1]
-            };
-        }
-        throw new Error('two argument form must be (url, success) or (url, data)');
-    } else if (args.length == 3) {
-        if (types[1] == 'function' && types[2] == 'function') {
-            return {
-                url: args[0],
-                success: args[1],
-                error: args[2]
-            };
-        } else if (types[1] == 'object' && types[2] == 'function') {
-            return {
-                url: args[0],
-                data: args[1],
-                success: args[2]
-            };
-        } else {
-            throw new Error('three argument form must be (url, success, error) or (url, data, success)');
-        }
-    }
-    throw new Error('unknown arguments');
 };
 
 /**
@@ -271,6 +216,10 @@ var readResponse = function(connection) {
     try {
         inStream = connection[(status >= 200 && status < 400) ?
                 "getInputStream" : "getErrorStream"]();
+        // return null in case of responses with an empty body
+        if (inStream === null) {
+            return null;
+        }
         var encoding = connection.getContentEncoding();
         if (encoding != null) {
             if (encoding === "gzip") {
@@ -292,18 +241,15 @@ var readResponse = function(connection) {
  * @name Exchange
  * @param {String} url The URL
  * @param {Object} options The options
- * @param {Object} callbacks An object containing success, error and complete
- * callback methods
  * @returns {Exchange} A newly constructed Exchange instance
  * @constructor
  */
-var Exchange = function(url, options, callbacks) {
+var Exchange = function(url, options) {
     var reqData = options.data;
     var connection = null;
     var responseContent;
     var responseContentBytes;
-    var isDone = false;
-    var isException;
+    var thrownException;
 
     Object.defineProperties(this, {
         /**
@@ -314,15 +260,6 @@ var Exchange = function(url, options, callbacks) {
             "get": function() {
                 return connection;
             }, "enumerable": true
-        },
-        /**
-         * True if the request has completed, false otherwise.
-         * @name Exchange.prototype.done
-         */
-        "done": {
-            "get": function() {
-                return isDone;
-            }, enumerable: true
         },
         /**
          * The response body as String.
@@ -393,8 +330,8 @@ var Exchange = function(url, options, callbacks) {
         for (let key in options.headers) {
             connection.setRequestProperty(key, options.headers[key]);
         }
-        if (typeof(callbacks.beforeSend) === "function") {
-            callbacks.beforeSend(this);
+        if (typeof(options.beforeSend) === "function") {
+            options.beforeSend(this);
         }
 
         if (options.method === "POST" || options.method === "PUT") {
@@ -407,36 +344,8 @@ var Exchange = function(url, options, callbacks) {
             }
         }
         responseContentBytes = readResponse(connection);
-        if (this.status > 300) {
-            throw new Error(this.status);
-        }
-        if (typeof(callbacks.success) === "function") {
-            var content = (options.binary === true) ? this.contentBytes : this.content;
-            callbacks.success(content, this.status, this.contentType, this);
-        }
-    } catch (e if e.javaException instanceof java.net.SocketTimeoutException) {
-        isException = 'timeout';
-        if (typeof(callbacks.error) === "function") {
-            callbacks.error("timeout", 500, this);
-        }
-    } catch (e) {
-        if (typeof(callbacks.error) === "function") {
-            callbacks.error(this.message, this.status, this);
-        }
     } finally {
-        isDone = true;
-        try {
-            if (typeof(callbacks.complete) === "function") {
-                if (isException) {
-                    callbacks.complete(isException, 500, undefined, this);
-                } else {
-                    var content = (options.binary === true) ? this.contentBytes : this.content;
-                    callbacks.complete(content, this.status, this.contentType, this);
-                }
-            }
-        } finally {
-            connection && connection.disconnect();
-        }
+        connection && connection.disconnect();
     }
 
     return this;
@@ -479,7 +388,16 @@ Object.defineProperties(Exchange.prototype, {
      */
     "headers": {
         "get": function() {
-            return new ScriptableMap(this.connection.getHeaderFields());
+            // This is required since getHeaderFields() returns an unmodifiable Map
+            // http://hg.openjdk.java.net/jdk8/jdk8/jdk/file/687fd7c7986d/src/share/classes/sun/net/www/protocol/http/HttpURLConnection.java#l2919
+            var headerFields = new java.util.HashMap(this.connection.getHeaderFields());
+
+            // drops the HTTP Status-Line with the key null
+            // null => HTTP/1.1 200 OK
+            // this is required since ScriptableMap cannot deal with null keys!
+            headerFields.remove(null);
+
+            return new ScriptableMap(headerFields);
         }, enumerable: true
     },
     /**
@@ -553,32 +471,11 @@ Object.defineProperties(Exchange.prototype, {
  *  - `followRedirects`: whether HTTP redirects (response code 3xx) should be
  *     automatically followed; default: true
  *  - `readTimeout`: setting for read timeout in millis. 0 return implies that the option
- *     is disabled (i.e., timeout of infinity); default: 0 (or until impl decides its time)
+ *     is disabled (i.e., timeout of infinity); default: 30000 ms (or until impl decides its time)
  *  - `connectTimeout`: Sets a specified timeout value, in milliseconds, to be used
  *     when opening a communications link to the resource referenced by this
  *     URLConnection. A timeout of zero is interpreted as an infinite timeout.;
- *     default: 0 (or until impl decides its time)
- *
- *  #### Callbacks
- *
- *  The `options` object may also contain the following callback functions:
- *
- *  - `complete`: called when the request is completed
- *  - `success`: called when the request is completed successfully
- *  - `error`: called when the request is completed with an error
- *  - `beforeSend`: called with the Exchange object as argument before the request is sent
- *
- *  The following arguments are passed to the `complete`, `success` and `part` callbacks:
- *  1. `content`: the content as String or ByteString
- *  2. `status`: the HTTP status code
- *  3. `contentType`: the content type
- *  4. `exchange`: the exchange object
- *
- *  The following arguments are passed to the `error` callback:
- *  1. `message`: the error message. This is either the message from an exception thrown
- *     during request processing or an HTTP error message
- *  2. `status`: the HTTP status code. This is `0` if no response was received
- *  3. `exchange`: the exchange object
+ *     default: 60000 ms (or until impl decides its time)
  *
  * @param {Object} options
  * @returns {Exchange} exchange object
@@ -588,6 +485,10 @@ Object.defineProperties(Exchange.prototype, {
  * @see #del
  */
 var request = function(options) {
+    if (options.complete != null || options.success != null || options.error != null) {
+        log.warn("ringo/httpclient does not support callbacks anymore!");
+    }
+
     var opts = prepareOptions(options);
     return new Exchange(opts.url, {
         "method": opts.method,
@@ -600,12 +501,8 @@ var request = function(options) {
         "connectTimeout": opts.connectTimeout,
         "readTimeout": opts.readTimeout,
         "binary": opts.binary,
-        "proxy": opts.proxy
-    }, {
-        "beforeSend": opts.beforeSend,
-        "success": opts.success,
-        "complete": opts.complete,
-        "error": opts.error
+        "proxy": opts.proxy,
+        "beforeSend": opts.beforeSend
     });
 };
 
@@ -614,22 +511,14 @@ var request = function(options) {
  * @param {String} method The request method
  * @param {String} url The URL
  * @param {String|Object|Stream|Binary} data Optional data to send to the server
- * @param {Function} success Optional success callback
- * @param {Function} error Optional error callback
  * @returns An options object
- * @type Object<method, url, data, success, error>
+ * @type Object<method, url, data>
  */
-var createOptions = function(method, url, data, success, error) {
-    var args = Array.prototype.slice.call(arguments, 1);
-    if (args.length < 4) {
-        var {url, data, success, error} = extractOptionalArguments(args);
-    }
+var createOptions = function(method, url, data) {
     return {
         method: method,
         url: url,
-        data: data,
-        success: success,
-        error: error
+        data: data
     };
 };
 
@@ -637,48 +526,40 @@ var createOptions = function(method, url, data, success, error) {
  * Executes a GET request.
  * @param {String} url The URL
  * @param {Object|String} data The data to append as GET parameters to the URL
- * @param {Function} success Optional success callback
- * @param {Function} error Optional error callback
  * @returns {Exchange} The Exchange instance representing the request and response
  */
-var get = function(url, data, success, error) {
-    return request(createOptions("GET", url, data, success, error));
+var get = function(url, data) {
+    return request(createOptions("GET", url, data));
 };
 
 /**
  * Executes a POST request.
  * @param {String} url The URL
  * @param {Object|String|Stream|Binary} data The data to send to the server
- * @param {Function} success Optional success callback
- * @param {Function} error Optional error callback
  * @returns {Exchange} The Exchange instance representing the request and response
  */
-var post = function(url, data, success, error) {
-    return request(createOptions("POST", url, data, success, error));
+var post = function(url, data) {
+    return request(createOptions("POST", url, data));
 };
 
 /**
  * Executes a DELETE request.
  * @param {String} url The URL
  * @param {Object|String} data The data to append as GET parameters to the URL
- * @param {Function} success Optional success callback
- * @param {Function} error Optional error callback
  * @returns {Exchange} The Exchange instance representing the request and response
  */
-var del = function(url, data, success, error) {
-    return request(createOptions("DELETE", url, data, success, error));
+var del = function(url, data) {
+    return request(createOptions("DELETE", url, data));
 };
 
 /**
  * Executes a PUT request.
  * @param {String} url The URL
  * @param {Object|String|Stream|Binary} data The data send to the server
- * @param {Function} success Optional success callback
- * @param {Function} error Optional error callback
  * @returns {Exchange} The Exchange instance representing the request and response
  */
-var put = function(url, data, success, error) {
-    return request(createOptions("PUT", url, data, success, error));
+var put = function(url, data) {
+    return request(createOptions("PUT", url, data));
 };
 
 /**

@@ -184,6 +184,8 @@ exports.testCapitalize = function () {
 
 exports.testTitleize = function () {
     assert.strictEqual('Titleize Me', strings.titleize('titleize me'));
+    assert.strictEqual('TItleize ME', strings.titleize('titleize me', 2));
+    assert.strictEqual('TITleize ME', strings.titleize('titleize me', 3));
 };
 
 exports.testEntitize = function () {
@@ -193,10 +195,6 @@ exports.testEntitize = function () {
 exports.testGroup = function () {
     assert.strictEqual(FOO.slice(0, 1) + NUM + FOO.slice(1, 2) + NUM + FOO.slice(2) +
             NUM, strings.group(FOO, 1, NUM));
-};
-
-exports.testUnwrap = function () {
-    assert.strictEqual(FOO + FOO + FOO, strings.unwrap(FOO + '\n' + FOO, true, FOO));
 };
 
 exports.testDigest = function () {
@@ -292,13 +290,18 @@ exports.testB64EncodeDecode = function() {
     }
 };
 
-exports.testStripTags = function () {
-    assert.strictEqual('content', strings.stripTags('<tag>content</tag>'));
-};
-
 exports.testEscapeHtml = function () {
-    assert.strictEqual('&lt;p&gt;Some text.&lt;/p&gt;',
-            strings.escapeHtml('<p>Some text.</p>'));
+    assert.strictEqual(strings.escapeHtml("<p>\'Some\' \"text\".</p>"), "&lt;p&gt;&#39;Some&#39; &quot;text&quot;.&lt;/p&gt;");
+    assert.strictEqual(strings.escapeHtml("nothing to escape"), "nothing to escape");
+    assert.strictEqual(strings.escapeHtml("one&two&three&"), "one&amp;two&amp;three&amp;");
+    assert.strictEqual(strings.escapeHtml("<tag> <tag> <tag>"), "&lt;tag&gt; &lt;tag&gt; &lt;tag&gt;");
+    assert.strictEqual(strings.escapeHtml("attr=\'foo\' attr=\'foo\'"), "attr=&#39;foo&#39; attr=&#39;foo&#39;");
+    assert.strictEqual(strings.escapeHtml("attr=\"foo\" attr=\"foo\""), "attr=&quot;foo&quot; attr=&quot;foo&quot;");
+    assert.strictEqual(strings.escapeHtml("a mixed <ta'&g\">"), "a mixed &lt;ta&#39;&amp;g&quot;&gt;");
+
+    // see https://github.com/mathiasbynens/he/blob/364b80262c54e7af0c8ff6910b10d872ae0c68c9/src/he.js#L45-L49
+    // http://html5sec.org/#102, http://html5sec.org/#108, http://html5sec.org/#133
+    assert.strictEqual(strings.escapeHtml("OldIE trick <`>`"), "OldIE trick &lt;&#96;&gt;&#96;")
 };
 
 exports.testEscapeRegExp = function() {
@@ -432,6 +435,6 @@ exports.testY64decode = function() {
     assert.strictEqual("????", strings.y64decode("Pz8_Pw--", "UTF-8"));
 };
 
-if (require.main == module.id) {
+if (require.main === module) {
     require('system').exit(require("test").run(module.id));
 }

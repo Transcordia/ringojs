@@ -9,13 +9,14 @@
 var {Stream, MemoryStream, TextStream} = require('io');
 var fs = require('fs');
 var arrays = require('ringo/utils/arrays');
+var sys = require("system");
 
 function parseArguments(args) {
     // arguments may end with a {dir: "", env: {}} object
     var opts = (args.length > 1 && arrays.peek(args) instanceof Object) ?
             Array.pop(args) : {};
     // make command either a single string or an array of strings
-    opts.command = args.length == 1 ? String(args[0]) : Array.map(args, String);
+    opts.command = args.length == 1 ? String(args[0]) : Array.prototype.map.call(args, String);
     return opts;
 }
 
@@ -156,8 +157,9 @@ exports.command = function() {
 };
 
 /**
- * Executes a given command, attached to this process's
- * output and error streams, and returns the exit status.
+ * Executes a given command, attached to the JVM process's
+ * output and error streams <code>System.stdout</code> and <code>System.stderr</code>,
+ * and returns the exit status.
  * @param {String} command command to call in the runtime environment
  * @param {String} [arguments...] optional arguments as single or multiple string parameters.
  *                 Each argument is analogous to a quoted argument on the command line.
@@ -169,8 +171,8 @@ exports.command = function() {
 exports.system = function() {
     var args = parseArguments(arguments);
     var process = createProcess(args);
-    var output = system.stdout,
-        errput = system.stderr;
+    var output = sys.stdout,
+        errput = sys.stderr;
     if (args.binary) {
         output = output.raw;
         errput = errput.raw;

@@ -1,17 +1,150 @@
 /**
- * @fileOverview A wrapper for the Jetty HTTP server.
+ * @fileOverview This module provides methods to start and control a HTTP web server.
+ * It is a wrapper for the Jetty web server and has support for the WebSocket protocol.
+ *
+ * @see <a href="http://www.eclipse.org/jetty/">Jetty – Servlet Engine and Http Server</a>
+ * @example // starts the current module via module.id as web application
+ * require("ringo/httpserver").main(module.id);
+ *
+ * // starts the module "./app/actions" as web application
+ * require("ringo/httpserver").main(module.resolve('./app/actions'));
  */
 
 var log = require('ringo/logging').getLogger(module.id);
 var system = require('system');
 var {JavaEventEmitter} = require('ringo/events');
-var {WebSocket, WebSocketServlet} = org.eclipse.jetty.websocket;
+var {WebSocketServlet, WebSocketCreator} = org.eclipse.jetty.websocket.servlet;
+var {WebSocketListener} = org.eclipse.jetty.websocket.api;
+var {ByteBuffer} = java.nio;
 
 export('Server', 'main', 'init', 'start', 'stop', 'destroy');
 
 var options,
     server,
     started = false;
+
+var WebSocket = function() {
+    this.session = null;
+
+    // make WebSocket a java event-emitter (mixin)
+    JavaEventEmitter.call(this, [WebSocketListener], {
+        "onWebSocketConnect": "connect",
+        "onWebSocketClose": "close",
+        "onWebSocketText": "text",
+        "onWebSocketBinary": "binary",
+        "onWebSocketError": "error"
+    });
+
+    return this;
+};
+
+/** @ignore */
+WebSocket.prototype.toString = function() {
+    return "[WebSocket]";
+};
+
+/**
+ * Closes the WebSocket connection.
+ * @name WebSocket.instance.close
+ * @function
+ */
+WebSocket.prototype.close = function() {
+    if (!this.isOpen()) {
+        throw new Error("Not connected");
+    }
+    this.session.close();
+    this.session = null;
+};
+
+/**
+ * Send a string over the WebSocket.
+ * @param {String} message a string
+ * @name WebSocket.instance.send
+ * @deprecated
+ * @see #sendString
+ * @function
+ */
+WebSocket.prototype.send = function(message) {
+    return this.sendString(message);
+};
+
+/**
+ * Send a string over the WebSocket. This method
+ * blocks until the message has been transmitted
+ * @param {String} message a string
+ * @name WebSocket.instance.sendString
+ * @function
+ */
+WebSocket.prototype.sendString = function(message) {
+    if (!this.isOpen()) {
+        throw new Error("Not connected");
+    }
+    this.session.getRemote().sendString(message);
+};
+
+/**
+ * Send a string over the WebSocket. This method
+ * does not wait until the message as been transmitted.
+ * @param {String} message a string
+ * @name WebSocket.instance.sendStringAsync
+ * @function
+ */
+WebSocket.prototype.sendStringAsync = function(message) {
+    if (!this.isOpen()) {
+        throw new Error("Not connected");
+    }
+    return this.session.getRemote().sendStringByFuture(message);
+};
+
+/**
+ * Send a byte array over the WebSocket. This method
+ * blocks until the message as been transmitted.
+ * @param {ByteArray} byteArray The byte array to send
+ * @param {Number} offset Optional offset (defaults to zero)
+ * @param {Number} length Optional length (defaults to the
+ * length of the byte array)
+ * @name WebSocket.instance.sendBinary
+ * @function
+ */
+WebSocket.prototype.sendBinary = function(byteArray, offset, length) {
+    if (!this.isOpen()) {
+        throw new Error("Not connected");
+    }
+    var buffer = ByteBuffer.wrap(byteArray, parseInt(offset, 10) || 0,
+        parseInt(length, 10) || byteArray.length);
+    return this.session.getRemote().sendBytes(buffer);
+};
+
+/**
+ * Send a byte array over the WebSocket. This method
+ * does not wait until the message as been transmitted.
+ * @param {ByteArray} byteArray The byte array to send
+ * @param {Number} offset Optional offset (defaults to zero)
+ * @param {Number} length Optional length (defaults to the
+ * length of the byte array)
+ * @name WebSocket.instance.sendBinaryAsync
+ * @returns {java.util.concurrent.Future}
+ * @function
+ */
+WebSocket.prototype.sendBinaryAsync = function(byteArray, offset, length) {
+    if (!this.isOpen()) {
+        throw new Error("Not connected");
+    }
+    var buffer = ByteBuffer.wrap(byteArray, parseInt(offset, 10) || 0,
+            parseInt(length, 10) || byteArray.length);
+    return this.session.getRemote().sendBytesByFuture(buffer);
+};
+
+/**
+ * Check whether the WebSocket is open.
+ * @name WebSocket.instance.isOpen
+ * @return {Boolean} true if the connection is open
+ * @function
+ */
+WebSocket.prototype.isOpen = function() {
+    return this.session !== null && this.session.isOpen();
+};
+
 
 /**
  * Create a Jetty HTTP server with the given options. The options may
@@ -22,28 +155,29 @@ var options,
  * properties (default values in parentheses):
  *
  * <ul>
- * <li>jettyConfig ('config/jetty.xml')</li>
- * <li>port (8080)</li>
- * <li>host (undefined)</li>
- * <li>sessions (true)</li>
- * <li>security (true)</li>
- * <li>cookieName (null)</li>
- * <li>cookieDomain (null)</li>
- * <li>cookiePath (null)</li>
- * <li>httpOnlyCookies (false)</li>
- * <li>secureCookies (false)</li>
+ * <li><code>jettyConfig</code> ('config/jetty.xml')</li>
+ * <li><code>port</code> (8080); overrides port of the default jetty.xml</li>
+ * <li><code>host</code> (localhost); overrides host of the default jetty.xml</li>
+ * <li><code>sessions</code> (true)</li>
+ * <li><code>security</code> (true)</li>
+ * <li><code>statistics</code> (false)</li>
+ * <li><code>cookieName</code> (null)</li>
+ * <li><code>cookieDomain</code> (null)</li>
+ * <li><code>cookiePath</code> (null)</li>
+ * <li><code>httpOnlyCookies</code> (false)</li>
+ * <li><code>secureCookies</code> (false)</li>
  * </ul>
  *
  * For convenience, the constructor supports the definition of a JSGI application
  * and static resource mapping in the options object using the following properties:
  *
  * <ul>
- * <li>virtualHost (undefined)</li>
- * <li>mountpoint ('/')</li>
- * <li>staticDir ('static')</li>
- * <li>staticMountpoint ('/static')</li>
- * <li>appModule ('main')</li>
- * <li>appName ('app')</li>
+ * <li><code>virtualHost</code> (undefined)</li>
+ * <li><code>mountpoint</code> ('/')</li>
+ * <li><code>staticDir</code> ('static')</li>
+ * <li><code>staticMountpoint</code> ('/static')</li>
+ * <li><code>appModule</code> ('main')</li>
+ * <li><code>appName</code> ('app')</li>
  * </ul>
  */
 function Server(options) {
@@ -72,17 +206,20 @@ function Server(options) {
     /**
      * Get a servlet application [context](#Context) for the given path and
      * virtual hosts, creating it if it doesn't exist.
-     * @param {String} path the context root path such as "/" or "/app"
+     * @param {String} path the context root path such as <code>"/"</code> or <code>"/app"</code>
      * @param {String|Array} virtualHosts optional single or multiple virtual host names.
-     *   A virtual host may start with a "*." wildcard.
+     *   A virtual host may start with a <code>"*."</code> wildcard.
      * @param {Object} options may have the following properties:
-     *   sessions: true to enable sessions for this context, false otherwise
-     *   security: true to enable security for this context, false otherwise
-     *   cookieName: optional cookie name
-     *   cookieDomain: optional cookie domain
-     *   cookiePath: optional cookie path
-     *   httpOnlyCookies: true to enable http-only session cookies
-     *   secureCookies: true to enable secure session cookies
+     * <ul>
+     *   <li><code>sessions</code>: true to enable sessions for this context, false otherwise
+     *   <li><code>security</code>: true to enable security for this context, false otherwise
+     *   <li><code>statistics</code>: true to enable statistics for this context, false otherwise
+     *   <li><code>cookieName</code>: optional cookie name
+     *   <li><code>cookieDomain</code>: optional cookie domain
+     *   <li><code>cookiePath</code>: optional cookie path
+     *   <li><code>httpOnlyCookies</code>: true to enable http-only session cookies
+     *   <li><code>secureCookies</code>: true to enable secure session cookies
+     * </ul>
      * @see #Context
      * @since: 0.6
      * @returns {Context} a Context object
@@ -92,11 +229,20 @@ function Server(options) {
         options = options || {};
         var contextKey = virtualHosts ? String(virtualHosts) + path : path;
         var cx = contextMap[contextKey];
+        var statsHandler = null;
         if (!cx) {
-            var contexts = idMap.get("Contexts");
+            var parentContainer = idMap.get("Contexts");
             var sessions = Boolean(options.sessions);
             var security = Boolean(options.security);
-            cx = new org.eclipse.jetty.servlet.ServletContextHandler(contexts, path, sessions, security);
+            var statistics = Boolean(options.statistics);
+            if (statistics === true) {
+                // add statistics handler and use it as parent container for
+                // the context handler created below
+                statsHandler = new org.eclipse.jetty.server.handler.StatisticsHandler();
+                parentContainer.addHandler(statsHandler);
+                parentContainer = statsHandler;
+            }
+            cx = new org.eclipse.jetty.servlet.ServletContextHandler(parentContainer, path, sessions, security);
             if (virtualHosts) {
                 cx.setVirtualHosts(Array.isArray(virtualHosts) ? virtualHosts : [String(virtualHosts)]);
             }
@@ -132,15 +278,48 @@ function Server(options) {
                 return cx;
             },
             /**
+             * Returns the statistics handler wrapping the servlet context handler,
+             * or null if statistics are disabled
+             * @returns {org.eclipse.jetty.server.handler.StatisticsHandler}
+             */
+            getStatisticsHandler: function() {
+                return statsHandler;
+            },
+            /**
              * Map this context to a JSGI application.
              * @param {Function|Object} app a JSGI application, either as a function
-             *   or an object with properties <code>appModule</code> and
-             *   <code>appName</code> defining the application.
-             *   <div><code>{ appModule: 'main', appName: 'app' }</code></div>
+             *   or an object with the properties
+             *   <ul>
+             *       <li><code>appModule</code> - the application module containing the application function
+             *       <li><code>appName</code> - the property's name that is exported by the application module and
+             *           which is a valid JSGI application.
+             *   </ul> defining the application.
              * @param {RhinoEngine} engine optional RhinoEngine instance for
              *   multi-engine setups
              * @since: 0.6
              * @name Context.instance.serveApplication
+             * @see <a href="https://gist.github.com/botic/e59e57022e6f59505315">Full example on Github</a>
+             * @example
+             * var server = new Server({ ... config ... });
+             *
+             * // 1st way: app argument is a JSGI application function
+             * server.getDefaultContext().serveApplication(function(req) {
+             *   return {
+             *     status: 200,
+             *     headers: {},
+             *     body: ["Hello World!"]
+             *   };
+             * });
+             *
+             * // 2nd way: app argument is an object
+             * server.getDefaultContext().serveApplication({
+             *   appModule: module.resolve("./myWebapp"),
+             *   // myWebapp exports a function called 'app'
+             *   appName: "app"
+             * });
+             *
+             * // since serveApplication() doesn't start the server:
+             * server.start();
              */
             serveApplication: function(app, engine) {
                 log.debug("Adding JSGI application:", cx, "->", app);
@@ -191,101 +370,64 @@ function Server(options) {
                 cx.addServlet(servletHolder, servletPath);
             },
             /**
-             * Start accepting WebSocket connections in this context context.
+             * Start accepting WebSocket connections in this context.
              *
              * @param {String} path The URL path on which to accept WebSocket connections
-             * @param {Function} onconnect a function called for each new WebSocket connection
-             *        with the WebSocket object as argument.
+             * @param {Function} onConnect A function called for each new WebSocket connection
+             *        with the WebSocket object and the session as arguments.
+             * @param {Function} onCreate Optional function called before a WebSocket
+             *        instance is created. This function receives the request and
+             *        response objects as arguments. Only if the function returns `true`
+             *        the upgrade request is accepted and a WebSocket instance is created.
+             *        Use this function for eg. authorization or authentication checks.
+             * @param {Object} initParams Optional object containing servlet
+             *          initialization parameters
              * @since 0.8
              * @see #WebSocket
              * @name Context.instance.addWebSocket
+             * @example
+             * var context = server.getDefaultContext();
+             * context.addWebSocket("/chat", function (socket) {
+             *   // reacts on an incoming message fromt the client
+             *   socket.onmessage = function(msg) {
+             *      // ...
+             *   };
+             *
+             *   // client closed the connection
+             *   socket.onclose = function() {
+             *      // ...
+             *   };
+             *
+             *   // sends a string to the client
+             *   socket.sendString("...");
+             *});
              */
-            addWebSocket: function(path, onconnect) {
+            addWebSocket: function(path, onConnect, onCreate, initParams) {
                 log.info("Starting websocket support");
-                this.addServlet(path, new WebSocketServlet({
-                    doWebSocketConnect : function(request, protocol) {
-                        log.debug("new websocket");
 
-                        var conn;
-                        /**
-                         * Provides support for WebSockets in the HTTP server.
-                         *
-                         * WebSocket is an event emitter that supports the
-                         * following events:
-                         *
-                         *  * **open**: called when a new websocket connection is accepted
-                         *  * **message**: Called with a complete text message when all fragments have been received.
-                         *  * **close**: called when an established websocket connection closes
-                         *
-                         * @name WebSocket
-                         */
-                        var socket = {
-                            /**
-                             * Closes the WebSocket connection.
-                             * @name WebSocket.instance.close
-                             * @function
-                             */
-                            close: function() {
-                                if (conn) {
-                                    conn.disconnect();
-                                }
-                            },
-                            /**
-                             * Send a string over the WebSocket.
-                             * @param {String} msg a string
-                             * @name WebSocket.instance.send
-                             * @function
-                             */
-                            send: function(msg) {
-                                if (conn) {
-                                    conn.sendMessage(msg);
-                                }
-                            },
-
-                            /**
-                             * Send a byte array over the WebSocket.
-                             * @param {ByteArray} bytearray The byte array to send
-                             * @param {Number} offset Optional offset (defaults to zero)
-                             * @param {Number} length Optional length (defaults to the
-                             * length of the byte array)
-                             * @name WebSocket.instance.sendBinary
-                             * @function
-                             */
-                            sendBinary: function(bytearray, offset, length) {
-                                if (conn) {
-                                    offset = parseInt(offset, 10) || 0;
-                                    length = parseInt(length, 10) || bytearray.length;
-                                    conn.sendMessage(bytearray, offset, length);
-                                }
-                            },
-
-                            /**
-                             * Check whether the WebSocket is open.
-                             * @name WebSocket.instance.isOpen
-                             * @return {Boolean} true if the connection is open
-                             * @function
-                             */
-                            isOpen: function() {
-                                return conn && conn.isOpen();
-                            }
-
-                        };
-
-                        // make socket a java event-emitter (mixin)
-                        JavaEventEmitter.call(socket, [WebSocket.OnTextMessage,
-                                                       WebSocket.OnBinaryMessage]);
-
-                        socket.addListener("open", function(connection) {
-                            conn = connection;
-                        });
-
-                        if (typeof onconnect === "function") {
-                            onconnect(socket, request, protocol);
+                var webSocketCreator = new WebSocketCreator({
+                    "createWebSocket": function(request, response) {
+                        if (typeof(onCreate) === "function" && onCreate(request, response) !== true) {
+                            return null;
                         }
+                        var socket = new WebSocket();
+                        socket.addListener("connect", function(session) {
+                            socket.session = session;
+                            if (typeof onConnect === "function") {
+                                onConnect(socket, session);
+                            }
+                        });
 
                         return socket.impl;
                     }
-                }));
+                });
+
+                this.addServlet(path, new WebSocketServlet({
+                    "configure": function(factory) {
+                        // factory.register(webSocketListener.impl);
+                        factory.setCreator(webSocketCreator);
+                    }
+                }), initParams);
             }
         };
     };
@@ -295,8 +437,10 @@ function Server(options) {
      */
     this.start = function() {
         jetty.start();
-        log.info('Server on http://' + (props.get('host') || 'localhost') +
-                ':' + props.get('port') + ' started.');
+        for each (let connector in jetty.getConnectors()) {
+            log.info('Server on http://' + connector.getHost() + ':' +
+                    connector.getPort() + ' started.');
+        }
     };
 
     /**
@@ -341,11 +485,6 @@ function Server(options) {
     var JsgiServlet = org.ringojs.jsgi.JsgiServlet;
     jetty = new org.eclipse.jetty.server.Server();
     xmlconfig = new XmlConfiguration(jettyConfig.inputStream);
-
-    // port config is done via properties
-    var props = xmlconfig.getProperties();
-    props.put('port', (options.port || 8080).toString());
-    if (options.host) props.put('host', options.host);
     xmlconfig.configure(jetty);
 
     // create default context
@@ -356,7 +495,8 @@ function Server(options) {
         cookieDomain: options.cookieDomain || null,
         cookiePath: options.cookiePath || null,
         httpOnlyCookies: options.httpOnlyCookies === true,
-        secureCookies: options.secureCookies === true
+        secureCookies: options.secureCookies === true,
+        statistics: options.statistics === true
     });
 
     // If options defines an application mount it
@@ -378,6 +518,19 @@ function Server(options) {
     // while start() is called with the user we will actually run as
     var connectors = jetty.getConnectors();
     for each (var connector in connectors) {
+        // Only set the host and port if exactly one connector is active.
+        // This is very likely the default HTTP connector from the
+        // modules/config/jetty.xml configuration, which has no connector name set
+        if (connectors.length == 1 && connector.getName() === null) {
+            if (options.host !== undefined) {
+                connector.setHost(options.host);
+            }
+
+            if (options.port > 0) {
+                connector.setPort(options.port);
+            }
+        }
+
         connector.open();
     }
 
@@ -471,12 +624,6 @@ function init(appPath) {
         options.appModule = fs.join(appDir, "main");
     }
 
-    // logging module is already loaded and configured, check if app provides
-    // its own log4j configuration file and apply it if so.
-    var logConfig = getResource(fs.join(appDir, "config/log4j.properties"));
-    if (logConfig.exists()) {
-        require("./logging").setConfig(logConfig);
-    }
     log.info("Set app module:", options.appModule);
 
     server = new Server(options);
@@ -553,8 +700,15 @@ function destroy() {
 
 /**
  * Main function to start an HTTP server from the command line.
+ * It automatically adds a shutdown hook which will stop and destroy the server at the JVM termination.
+ *
  * @param {String} appPath optional application file name or module id.
  * @returns {Server} the Server instance.
+ * @example // starts the current module via module.id as web application
+ * require("ringo/httpserver").main(module.id);
+ *
+ * // starts the module "./app/actions" as web application
+ * require("ringo/httpserver").main(module.resolve('./app/actions'));
  */
 function main(appPath) {
     init(appPath);

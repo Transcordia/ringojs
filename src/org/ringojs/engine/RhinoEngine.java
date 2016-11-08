@@ -76,7 +76,7 @@ public class RhinoEngine implements ScopeProvider {
     private static Logger log = Logger.getLogger(RhinoEngine.class.getName());
 
     public static final List<Integer> VERSION =
-            Collections.unmodifiableList(Arrays.asList(0, 11, 0));
+            Collections.unmodifiableList(Arrays.asList(0, 12, 0));
 
     /**
      * Create a RhinoEngine with the given configuration. If <code>globals</code>
@@ -543,6 +543,23 @@ public class RhinoEngine implements ScopeProvider {
                 String moduleId;
                 Resource res;
 
+                // Load JAR dependencies
+                Object jars = ScriptableObject.getProperty(obj, "jars");
+                if (jars != null && jars instanceof Scriptable && ScriptRuntime.isArrayObject(jars)) {
+                    Object[] jarsToLoad = ScriptRuntime.getArrayElements((Scriptable) jars);
+                    for (Object jar : jarsToLoad) {
+                        Resource jarResource = parent.getResource(jar.toString());
+                        if (!jarResource.exists()) {
+                            log.warning("Skipping non-existing JAR resource in package.json descriptor for " +
+                                    packageName + ": " + jar.toString() + " - " + jarResource.getUrl());
+                        } else {
+                            log.config("Adding JAR resource from " + packageName +
+                                    " package.json descriptor to classpath: " + jarResource.getUrl());
+                            loader.addURL(jarResource.getUrl());
+                        }
+                    }
+                }
+
                 if (remainingName == null) {
                     // get the main module of this package
                     moduleId = getStringProperty(obj, "main", null);
@@ -590,6 +607,7 @@ public class RhinoEngine implements ScopeProvider {
             }
             return (Scriptable) result;
         } catch (JsonParser.ParseException px) {
+            log.severe("Could not parse package.json " + resource.getUrl());
             throw new RuntimeException(px);
         }
     }

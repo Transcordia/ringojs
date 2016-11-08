@@ -1,14 +1,25 @@
 /**
  * @fileoverview Provides utility functions to work with HTTP requests and responses.
+ * Most methods are useful for low-level operations only.
+ * To develop a full-featured web application it’s recommended to use a dedicated
+ * web framework like <a href="https://github.com/ringo/stick">stick</a>.
  */
 
 var dates = require('ringo/utils/dates');
 var strings = require('ringo/utils/strings');
 var {Buffer} = require('ringo/buffer');
 var {Binary, ByteArray, ByteString} = require('binary');
-var {open} = require('fs');
 var {MemoryStream} = require('io');
-var {createTempFile} = require('ringo/utils/files');
+
+// prevents illegal access exceptions in App Engine since
+// App Engine doesn't allow any filesystem-related operations
+var open = null,
+    createTempFile = null;
+
+if (java.lang.System.getProperty("com.google.appengine.runtime.version") == null) {
+    open = require('fs').open;
+    createTempFile = require('ringo/utils/files').createTempFile;
+}
 
 export('ResponseFilter', 'Headers', 'getMimeParameter', 'urlEncode', 'setCookie',
         'isUrlEncoded', 'isFileUpload', 'parseParameters', 'mergeParameter',
@@ -39,9 +50,18 @@ function ResponseFilter(body, filter) {
 }
 
 /**
- * Returns an object for use as a HTTP header collection. The returned object
+ * @ignore interal function, following RFC 7230 section 3.2.2. field order
+ */
+function sanitizeHeaderValue(fieldValue) {
+    return fieldValue.replace(/\n/g, "").trim();
+}
+
+/**
+ * Returns an object for use as a HTTP request header collection. The returned object
  * provides methods for setting, getting, and deleting its properties in a
- * case-insensitive and case-preserving way.
+ * case-insensitive and case-preserving way. Multiple headers with the same
+ * field name will be merged into a comma-separated string. Therefore the
+ * <code>Set-Cookie</code> header is not supported by this function.
  *
  * This function can be used as mixin for an existing JavaScript object or as a
  * constructor.
@@ -73,7 +93,8 @@ function Headers(headers) {
             if (value === undefined) {
                 value = (key = keys[key.toLowerCase()]) && this[key];
             }
-            return value;
+
+            return (typeof value === "string" ? sanitizeHeaderValue(value) : value);
         }
     });
 
@@ -85,8 +106,7 @@ function Headers(headers) {
      */
     Object.defineProperty(headers, "set", {
         value: function(key, value) {
-            // JSGI uses \n as separator for mulitple headers
-            value = value.replace(/\n/g, "");
+            value = sanitizeHeaderValue(value);
             var oldkey = keys[key.toLowerCase()];
             if (oldkey) {
                 delete this[oldkey];
@@ -104,17 +124,16 @@ function Headers(headers) {
      */
     Object.defineProperty(headers, "add", {
         value: function(key, value) {
-            // JSGI uses \n as separator for mulitple headers
-            value = value.replace(/\n/g, "");
+            value = sanitizeHeaderValue(value);
             if (this[key]) {
                 // shortcut
-                this[key] = this[key] + "\n" + value;
+                this[key] = this[key] + "," + value;
                 return;
             }
             var lowerkey = key.toLowerCase();
             var oldkey = keys[lowerkey];
             if (oldkey) {
-                value = this[oldkey] + "\n" + value;
+                value = this[oldkey] + "," + value;
                 if (key !== oldkey)
                     delete this[oldkey];
             }
@@ -146,7 +165,7 @@ function Headers(headers) {
         value: function(key) {
            key = key.toLowerCase();
             if (key in keys) {
-                delete this[keys[key]]
+                delete this[keys[key]];
                 delete keys[key];
             }
         }
@@ -190,10 +209,18 @@ function getMimeParameter(headerValue, paramName) {
         var eq = headerValue.indexOf("=", start);
         if (eq > start && eq < end) {
             var name = headerValue.slice(start, eq);
+
+            // RFC 2231: Specifically, an asterisk at the end of a parameter name acts as an
+            // indicator that character set and language information may appear at
+            // the beginning of the parameter value.
+            if (name.length > 1 && name.charAt(name.length - 1) === "*") {
+                name = name.substr(0, name.length - 1);
+            }
+
             if (name.toLowerCase().trim() == paramName) {
                 var value = headerValue.slice(eq + 1, end).trim();
                 if (strings.startsWith(value, '"') && strings.endsWith(value, '"')) {
-                    return value.slice(1, -1).replace('\\\\', '\\').replace('\\"', '"');
+                    return value.slice(1, -1).replace(/\\\\/g, '\\').replace(/\\\"/g, '"');
                 } else if (strings.startsWith(value, '<') && strings.endsWith(value, '>')) {
                     return value.slice(1, -1);
                 }
@@ -205,21 +232,47 @@ function getMimeParameter(headerValue, paramName) {
     return null;
 }
 
+function encodeObjectComponent(object, prefix, buffer) {
+    for (var key in object) {
+        let value = object[key];
+        let keyStr = Array.isArray(object) ? "" : key;
+        if (Array.isArray(value)) {
+            encodeObjectComponent(value, prefix + "[" + keyStr + "]", buffer);
+        } else if (typeof value === "object") {
+            encodeObjectComponent(value, prefix + "[" + keyStr + "]", buffer);
+        } else {
+            if (buffer.length) buffer.write("&");
+            buffer.write(encodeURIComponent(prefix + "[" + keyStr + "]"), "=", encodeURIComponent(value));
+        }
+    }
+}
+
 /**
- * Encode an object's properties into an URL encoded string.
+ * Encode an object's properties into an URL encoded string. If a property contains an array as value,
+ * the array will be serialized.
  * @param {Object} object an object
  * @returns {String} a string containing the URL encoded properties of the object
+ * @example // "foo=bar%20baz"
+ * http.urlEncode({ foo: "bar baz" });
+ *
+ * // "foo=bar%20baz&foo=2&foo=3"
+ * http.urlEncode({ foo: ["bar baz", 2, 3] });
+ *
+ * // "foo%5Bbar%5D%5B%5D%5Bbaz%5D=hello"
+ * http.urlEncode({foo: {bar: [{baz: "hello"}]}});
  */
 function urlEncode(object) {
     var buf = new Buffer();
     var key, value;
     for (key in object) {
         value = object[key];
-        if (value instanceof Array) {
+        if (Array.isArray(value)) {
             for (var i = 0; i < value.length; i++) {
                 if (buf.length) buf.write("&");
                 buf.write(encodeURIComponent(key), "=", encodeURIComponent(value[i]));
             }
+        } else if (typeof value === "object") {
+            encodeObjectComponent(value, key, buf);
         } else {
             if (buf.length) buf.write("&");
             buf.write(encodeURIComponent(key), "=", encodeURIComponent(value));
@@ -227,6 +280,8 @@ function urlEncode(object) {
     }
     return buf.toString();
 }
+
+const PATH_CTL = java.util.regex.Pattern.compile("[\x00-\x1F\x7F\x3B]");
 
 /**
  * Creates value for the Set-Cookie header for creating a cookie with the given
@@ -239,19 +294,29 @@ function urlEncode(object) {
  *
  * @param {String} key the cookie name
  * @param {String} value the cookie value
- * @param {Number} days optional the number of days to keep the cookie.
+ * @param {Number|Date} days optional the number of days to keep the cookie, or a Date object
+ * with the exact expiry date.
  * If this is undefined or -1, the cookie is set for the current session.
  * If this is 0, the cookie will be deleted immediately.
  * @param {Object} options optional options argument which may contain the following properties:
  * <ul><li>path - the path on which to set the cookie (defaults to /)</li>
  * <li>domain - the domain on which to set the cookie (defaults to current domain)</li>
  * <li>secure - to only use this cookie for secure connections</li>
- * <li>httpOnly - to make the cookie inaccessible to client side scripts</li></ul>
+ * <li>httpOnly - to make the cookie inaccessible to client side scripts</li>
+ * <li>sameSite - first-party-only cookie; asserts browsers not to send cookies along with cross-site requests;
+ * default is strict enforcement, any other enforcement can be provided as string.</li>
+ * </ul>
  * @since 0.8
  * @return {String} the Set-Cookie header value
  * @example setCookie("username", "michi");
  * setCookie("password", "strenggeheim", 10,
- * {path: "/mypath", domain: ".mydomain.org"});
+ *   {path: "/mypath", domain: ".mydomain.org"});
+ *
+ * setCookie("foo", "bar", 10,
+ *   { httpOnly: true, secure: true, sameSite: true });
+ *
+ * setCookie("foo", "bar", 10,
+ *   { httpOnly: true, secure: true, sameSite: "Lax" })
  */
 function setCookie(key, value, days, options) {
     if (value) {
@@ -259,24 +324,42 @@ function setCookie(key, value, days, options) {
         value = value.replace(/[\r\n]/g, "");
     }
     var buffer = new Buffer(key, "=", value);
-    if (typeof days == "number" && days > -1) {
-        var expires = days == 0 ?
+
+    if (days !== undefined) {
+        var expires;
+        if (typeof days == "number" && days > -1) {
+            expires = days == 0 ?
                 new Date(0) : new Date(Date.now() + days * 1000 * 60 * 60 * 24);
-        var cookieDateFormat = "EEE, dd-MMM-yyyy HH:mm:ss zzz";
-        buffer.write("; expires=");
-        buffer.write(dates.format(expires, cookieDateFormat, "en", "GMT"));
+        } else if (days instanceof Date) {
+            expires = days;
+        } else {
+            throw new Error("Invalid expiration date! ", days);
+        }
+        buffer.write("; Expires=");
+        buffer.write(dates.format(expires, "EEE, dd-MMM-yyyy HH:mm:ss zzz", "en", "GMT"));
     }
     options = options || {};
+    if (options.path && (typeof options.path !== "string" || PATH_CTL.matcher(options.path).find())) {
+        throw new Error("Cookie path not a string or contains CTL characters (%x00-1F;%x7F)");
+    }
     var path = options.path || "/";
-    buffer.write("; path=", encodeURI(path));
+    buffer.write("; Path=", encodeURI(path));
     if (options.domain) {
-        buffer.write("; domain=", options.domain.toLowerCase());
+        buffer.write("; Domain=", options.domain.toLowerCase());
     }
     if (options.secure) {
-        buffer.write("; secure");
+        buffer.write("; Secure");
     }
     if (options.httpOnly) {
         buffer.write("; HttpOnly");
+    }
+    if (options.sameSite) {
+        // https://tools.ietf.org/html/draft-west-first-party-cookies-06#section-4.1
+        if (typeof options.sameSite === "string") {
+            buffer.write("; SameSite=" + options.sameSite);
+        } else {
+            buffer.write("; SameSite=Strict");
+        }
     }
     return buffer.toString();
 }
@@ -324,14 +407,23 @@ function isFileUpload(contentType) {
 
 
 /**
- * Parse a string or binary object representing a query string or post data into
- * a JavaScript object structure using the specified encoding.
+ * Parses a string or binary object representing a query string via an URL or post data into
+ * a JavaScript object structure using the specified encoding. It uses the <code>"&amp;"</code>
+ * as separator between parameters and <code>"="</code> for assignments.
  * @param {Binary|String} input a Binary object or string containing the
  *        URL-encoded parameters
  * @param {Object} params optional parameter object to parse into. If undefined
  *        a new object is created and returned.
  * @param {String} encoding a valid encoding name, defaults to UTF-8
  * @returns {Object} the parsed parameter object
+ * @example parseParameters("a=1&b=2&b=3&c");
+ * // returns { a: "1", b: ["2","3"], c: ""}
+ *
+ * parseParameters("a[]=1&a[]=2&a[]=3");
+ * // returns { a: ["1", "2","3"]}
+ *
+ * parseParameters("foo[bar][baz]=hello&foo[bar][boo]=world");
+ * // returns {foo: {bar: {baz: "hello", boo: "world"}}}
  */
 function parseParameters(input, params, encoding) {
     if (!input) {
@@ -343,11 +435,22 @@ function parseParameters(input, params, encoding) {
     params = params || {};
     encoding = encoding || "UTF-8";
     for each (var param in input.split(AMPERSAND)) {
-        var [name, value] = param.split(EQUALS);
-        if (name && value) {
-            name = decodeToString(name, encoding);
-            value = decodeToString(value, encoding);
-            mergeParameter(params, name.trim(), value);
+        var name, value;
+
+        // single parameter without any value
+        if (param.indexOf(EQUALS) < 0) {
+            name = param;
+            value = new ByteString("", encoding);
+        } else {
+            [name, value] = param.split(EQUALS, { count: 2 });
+        }
+
+        name = decodeToString(name, encoding);
+        value = decodeToString(value, encoding);
+
+        // only empty keys are not allowed
+        if (name !== "") {
+            mergeParameter(params, name, value);
         }
     }
     return params;
@@ -367,15 +470,18 @@ function mergeParameter(params, name, value) {
         var names = name.split(/\]\s*\[|\[|\]/).map(function(s) s.trim()).slice(0, -1);
         mergeParameterInternal(params, names, value);
     } else {
-        // not matching the foo[bar] pattern, add param as is. If there is another param with the
-        // same name, we need to create an array.
-        if (params[name]) {
-            if (Array.isArray(params[name])) params[name].push(value);
-            else {
-                params[name] = [].concat(params[name]).concat(value);
-            }
-        } else {
+        // not matching the foo[bar] pattern, add param as is
+        if (!params.hasOwnProperty(name)) {
             params[name] = value;
+        } else {
+            // is parameter a single-key param?
+            if (!Array.isArray(params[name])) {
+                // convert the parameter to a value array
+                params[name] = [params[name], value];
+            } else {
+                // push to the existing value array
+                params[name].push(value);
+            }
         }
     }
 }

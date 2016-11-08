@@ -13,7 +13,7 @@ var port = "8282";
 var baseUri = "http://" + host + ":" + port + "/";
 
 /**
- * tests overwrite checkRequest() to control the 
+ * tests overwrite checkRequest() to control the
  */
 var checkRequest = function(req) { return; };
 
@@ -175,15 +175,10 @@ exports.testMultipleHeaders = function () {
     checkRequest = function(req) {
         assert.equal(req.method, "GET");
         assert.equal(req.scheme, "http");
-        
+
         assert.equal(req.headers.host, host + ":" + port); // This follows RFC 2616!
-        assert.equal(req.headers["x-foo"], "bar");
-        
-        var headersArray = [];
-        for (var headers = req.env.servletRequest.getHeaders("x-foo"); headers.hasMoreElements(); ) {
-            headersArray.push(headers.nextElement());
-        }
-        assert.equal("bar, baz, 012345;q=15", headersArray.join(", "));
+        assert.equal(req.headers["x-foo-single"], "single-bar");
+        assert.equal(req.headers["x-foo"], "bar,baz,012345;q=15");
     };
 
     var connection = (new java.net.URL(baseUri)).openConnection();
@@ -196,6 +191,28 @@ exports.testMultipleHeaders = function () {
 
     connection.addRequestProperty("x-foo-single", "single-bar");
 
+    connection.connect();
+    connection.getResponseCode();
+};
+
+exports.testServletEnvironment = function () {
+    checkRequest = function(req) {
+        assert.equal(req.method, "GET");
+        assert.equal(req.scheme, "http");
+
+        assert.isNotUndefined(req.env.servlet);
+        assert.isNotUndefined(req.env.servletRequest);
+        assert.isNotUndefined(req.env.servletResponse);
+
+        assert.isTrue(typeof req.env.servlet.getServletConfig === "function");
+        assert.isTrue(typeof req.env.servletRequest.getPathInfo === "function");
+        assert.isTrue(typeof req.env.servletResponse.getStatus === "function");
+    };
+
+    var connection = (new java.net.URL(baseUri)).openConnection();
+    connection.setRequestMethod("GET");
+
+    // addRequestProperty() does not override existing header pairs!
     connection.connect();
     connection.getResponseCode();
 };
@@ -248,7 +265,7 @@ exports.testOptions = function() {
 };
 
 // start the test runner if we're called directly from command line
-if (require.main == module.id) {
+if (require.main === module) {
     var {run} = require("test");
     require("system").exit(run(exports));
 }

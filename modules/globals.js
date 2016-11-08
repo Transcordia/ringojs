@@ -70,7 +70,7 @@ Object.defineProperty(this, "global", { value: this });
                 exports = {};
                 Object.defineProperty(module, "exports", { value: exports });
             }
-            Array.forEach(arguments, function(name) {
+            Array.prototype.forEach.call(arguments, function(name) {
                 Object.defineProperty(exports, name, {
                     get: function() {
                         return module[name];
@@ -96,7 +96,7 @@ Object.defineProperty(this, "global", { value: this });
      * @see #clearTimeout()
      */
     this.setTimeout = function(callback, delay) {
-        var args = Array.slice(arguments, 2);
+        var args = Array.prototype.slice.call(arguments, 2);
         delay = parseInt(delay, 10) || 0;
         var worker = engine.getCurrentWorker(callback);
         return worker.schedule(delay, this, callback, args);
@@ -132,7 +132,7 @@ Object.defineProperty(this, "global", { value: this });
      * @see #clearInterval()
      */
     global.setInterval =  function(callback, delay) {
-        var args = Array.slice(arguments, 2);
+        var args = Array.prototype.slice.call(arguments, 2);
         delay = Math.max(parseInt(delay, 10) || 0, 1);
         var worker = engine.getCurrentWorker(callback);
         return worker.scheduleInterval(delay, this, callback, args);
@@ -233,7 +233,7 @@ Object.defineProperty(this, "global", { value: this });
  *
  * @name require.main
  * @example // is the current module is the main module?
- *  if (require.main == module.id) {
+ *  if (require.main === module) {
  *   // Start up actions like in a Java public static void main() method
  *   var server = new Server();
  *   server.start();
@@ -382,7 +382,7 @@ Object.defineProperty(this, "global", { value: this });
  * Runs the garbage collector.
  * @name gc
  * @function
- * @see <a href="http://docs.oracle.com/javase/7/docs/api/java/lang/Runtime.html#gc()">java.lang.Runtime.gc()</a>
+ * @see <a href="http://docs.oracle.com/javase/8/docs/api/java/lang/Runtime.html#gc()">java.lang.Runtime.gc()</a>
  */
 
 /**

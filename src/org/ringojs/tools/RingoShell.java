@@ -16,9 +16,9 @@
 
 package org.ringojs.tools;
 
-import jline.Completor;
-import jline.ConsoleReader;
-import jline.History;
+import jline.console.completer.Completer;
+import jline.console.ConsoleReader;
+import jline.console.history.FileHistory;
 import org.ringojs.engine.ModuleScope;
 import org.ringojs.engine.ReloadableScript;
 import org.ringojs.engine.RhinoEngine;
@@ -82,12 +82,15 @@ public class RingoShell {
         preloadShellModule();
         ConsoleReader reader = new ConsoleReader();
         reader.setBellEnabled(false);
+        reader.setExpandEvents(false);
         // reader.setDebug(new PrintWriter(new FileWriter("jline.debug")));
-        reader.addCompletor(new JSCompletor());
+        reader.addCompleter(new JSCompleter());
         if (history == null) {
             history = new File(System.getProperty("user.home"), ".ringo-history");
         }
-        reader.setHistory(new History(history));
+        FileHistory fileHistory = new FileHistory(history);
+        reader.setHistory(fileHistory);
+        Runtime.getRuntime().addShutdownHook(new ShutdownHook(fileHistory));
         PrintStream out = System.out;
         int lineno = 0;
         repl: while (true) {
@@ -215,7 +218,7 @@ public class RingoShell {
         t.start();
     }
 
-    class JSCompletor implements Completor {
+    class JSCompleter implements Completer {
 
         Pattern variables = Pattern.compile(
                 "(^|\\s|[^\\w\\.'\"])([\\w\\.]+)$");
@@ -290,6 +293,22 @@ public class RingoShell {
             }
         }
 
+    }
+
+    private class ShutdownHook extends Thread {
+        FileHistory fileHistory;
+
+        public ShutdownHook(FileHistory fileHistory) {
+            this.fileHistory = fileHistory;
+        }
+
+        public void run() {
+            try {
+                fileHistory.flush();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     static String[] jsKeywords =

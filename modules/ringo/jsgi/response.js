@@ -60,7 +60,7 @@ Object.defineProperty(JsgiResponse.prototype, "setStatus", {
 Object.defineProperty(JsgiResponse.prototype, "text", {
     value: function() {
         this.headers["content-type"] = "text/plain; charset=" + this._charset;
-        this.body = Array.slice(arguments).map(String);
+        this.body = Array.prototype.slice.call(arguments).map(String);
         return this;
     }
 });
@@ -73,7 +73,7 @@ Object.defineProperty(JsgiResponse.prototype, "text", {
 Object.defineProperty(JsgiResponse.prototype, "html", {
     value: function() {
         this.headers["content-type"] = "text/html; charset=" + this._charset;
-        this.body = Array.slice(arguments).map(String);
+        this.body = Array.prototype.slice.call(arguments).map(String);
         return this;
     }
 });
@@ -122,6 +122,30 @@ Object.defineProperty(JsgiResponse.prototype, "xml", {
 });
 
 /**
+ * Create a JSGI response with a stream as response body.
+ * @param {Stream} stream the stream to write
+ * @param {String} contentType optional MIME type. If not defined,
+ *         the MIME type is <code>application/octet-stream</code>.
+ * @returns {JsgiResponse} JSGI response
+ */
+Object.defineProperty(JsgiResponse.prototype, "stream", {
+    value: function (stream, contentType) {
+        if (!(stream instanceof Stream)) {
+            throw Error("Wrong argument for stream response: " + typeof(resource));
+        }
+
+        if (!stream.readable()) {
+            throw Error("Stream is not readable!");
+        }
+
+        this.headers["content-type"] = contentType || "application/octet-stream";
+        this.body = stream;
+
+        return this;
+    }
+});
+
+/**
  * Set the character encoding used for text responses.
  * @param {String} charsetName the encoding to use.
  * @returns {JsgiResponse} JSGI response with the given charset
@@ -144,8 +168,29 @@ Object.defineProperty(JsgiResponse.prototype, "setCharset", {
  * @returns {JsgiResponse} JSGI response with the new headers
  */
 Object.defineProperty(JsgiResponse.prototype, "addHeaders", {
-    value: function(headers) {
-        this.headers = merge(headers, this.headers);
+    value: function(additionalHeaders) {
+        for (let fieldName in additionalHeaders) {
+            let existingValues = this.headers[fieldName];
+
+            // check if the header is already set
+            if (existingValues === undefined) {
+                if (additionalHeaders[fieldName] instanceof Array) {
+                    // add multiple header values as an array of strings
+                    this.headers[fieldName] = additionalHeaders[fieldName].map(function(headerValue) {
+                        return String(headerValue);
+                    });
+                } else {
+                    // single-valued header as arbitrary string
+                    this.headers[fieldName] = String(additionalHeaders[fieldName]);
+                }
+            } else if (typeof existingValues === "string") {
+                // the header has been set already exactly once, so expand it to an array
+                this.headers[fieldName] = [existingValues, String(additionalHeaders[fieldName])];
+            } else {
+                // the header is already an array of multiple values --> push new value
+                this.headers[fieldName].push(String(additionalHeaders[fieldName]));
+            }
+        }
         return this;
     }
 });
@@ -428,7 +473,7 @@ Object.defineProperty(JsgiResponse.prototype, "notModified", {
 
 // Define helper functions
 /** @ignore */
-["setStatus", "text", "html", "json", "jsonp", "xml", "setCharset", "addHeaders",
+["setStatus", "text", "html", "json", "jsonp", "xml", "stream", "setCharset", "addHeaders",
     "ok", "created", "bad", "unauthorized", "forbidden", "notFound", "gone", "error",
     "unavailable", "redirect", "notModified"].forEach(function(functionName) {
     exports[functionName] = function() {
