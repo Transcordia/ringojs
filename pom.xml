@@ -5,7 +5,7 @@
 
     <groupId>io.ejs</groupId>
     <artifactId>ringojs</artifactId>
-    <version>0.11.1-SNAPSHOT</version>
+    <version>0.12.0-SNAPSHOT</version>
 
     <packaging>jar</packaging>
 
@@ -139,37 +139,29 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <jetty-version>8.1.16.v20140903</jetty-version>
-        <slf4j-version>1.7.10</slf4j-version>
+        <jetty-version>9.3.8.v20160314</jetty-version>
+        <slf4j-version>1.7.21</slf4j-version>
         <log4j-version>1.2.17</log4j-version>
-        <rhino-version>1.7R5pre</rhino-version>
+        <rhino-version>1.7.7.1</rhino-version>
         <junit-version>4.12</junit-version>
         <jnr-posix-version>1.1.9</jnr-posix-version>
         <constantine-version>0.7</constantine-version>
         <jffi-version>1.0.10</jffi-version>
         <jaffl-version>0.5.12</jaffl-version>
-        <jline-version>1.0</jline-version>
-        <servlet-version>3.0.0.v201112011016</servlet-version>
+        <jline-version>2.12.1</jline-version>
     </properties>
 
     <dependencies>
-
         <dependency>
-            <groupId>org.eclipse.jetty</groupId>
-            <artifactId>jetty-client</artifactId>
-            <version>${jetty-version}</version>
+            <groupId>org.mozilla</groupId>
+            <artifactId>rhino</artifactId>
+            <version>${rhino-version}</version>
         </dependency>
 
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
             <version>${slf4j-version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>io.ejs</groupId>
-            <artifactId>rhino</artifactId>
-            <version>${rhino-version}</version>
         </dependency>
 
         <dependency>
@@ -184,30 +176,6 @@
         </dependency>
 
         <dependency>
-            <groupId>org.jruby.ext.posix</groupId>
-            <artifactId>jnr-posix</artifactId>
-            <version>${jnr-posix-version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.jruby.extras</groupId>
-            <artifactId>constantine</artifactId>
-            <version>${constantine-version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.jruby.extras</groupId>
-            <artifactId>jffi</artifactId>
-            <version>${jffi-version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.jruby.extras</groupId>
-            <artifactId>jaffl</artifactId>
-            <version>${jaffl-version}</version>
-        </dependency>
-
-        <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-log4j12</artifactId>
             <version>${slf4j-version}</version>
@@ -219,13 +187,6 @@
             <artifactId>log4j</artifactId>
             <version>${log4j-version}</version>
             <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.eclipse.jetty.orbit</groupId>
-            <artifactId>javax.servlet</artifactId>
-            <version>${servlet-version}</version>
-            <scope>provided</scope>
         </dependency>
 
         <dependency>
@@ -246,14 +207,28 @@
 
         <dependency>
             <groupId>org.eclipse.jetty</groupId>
-            <artifactId>jetty-xml</artifactId>
+            <artifactId>jetty-servlet</artifactId>
             <version>${jetty-version}</version>
             <scope>provided</scope>
         </dependency>
 
         <dependency>
             <groupId>org.eclipse.jetty</groupId>
-            <artifactId>jetty-servlet</artifactId>
+            <artifactId>jetty-servlets</artifactId>
+            <version>${jetty-version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.eclipse.jetty.websocket</groupId>
+            <artifactId>websocket-server</artifactId>
+            <version>${jetty-version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.eclipse.jetty</groupId>
+            <artifactId>jetty-xml</artifactId>
             <version>${jetty-version}</version>
             <scope>provided</scope>
         </dependency>
