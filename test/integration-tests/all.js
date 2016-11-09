@@ -14,6 +14,13 @@ const RINGO_BIN = (function() {
    return fs.join(module.resolve('../../bin'), bin);
 })();
 
+system.print('module', module.resolve('jars-to-classpath'))
+
+/*
+This integration test forks a process to run ringo from command line
+which is not supported when building a single RingoJS artifact meant
+to function as a maven dependency.
+
 exports.testJarsToClasspath = function() {
    var process = createProcess({
       command: [RINGO_BIN, 'main.js'],
@@ -23,6 +30,7 @@ exports.testJarsToClasspath = function() {
    // wait for the exit code
    assert.equal(process.wait(), 0);
 };
+*/
 
 exports.testRequireMain = require("./require-index/main").testCalculator;
 exports.testHttpJsgiBinding = require("./http-jsgi-binding/simple").testHttpJsgiBinding;
